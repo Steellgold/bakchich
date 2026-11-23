@@ -4,10 +4,11 @@ import { z } from "zod";
 export type Intent
   = | { kind: "open-trial"; crime: string | null }
     | { kind: "show-record" }
+    | { kind: "start-now" }
     | { kind: "chat" };
 
 const schema = z.object({
-  intent: z.enum(["open-trial", "show-record", "chat"]),
+  intent: z.enum(["open-trial", "show-record", "start-now", "chat"]),
   crime: z.string().nullish(),
 });
 

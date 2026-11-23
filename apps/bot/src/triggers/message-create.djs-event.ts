@@ -1,4 +1,4 @@
-import type { Message } from "discord.js";
+import type { Message, MessageReplyOptions } from "discord.js";
 import { parseCommand } from "#/court/command";
 import { court, judge } from "#/court/court";
 import { EMOJI } from "#/court/emojis";
@@ -8,9 +8,10 @@ import { saveHearing } from "#/court/hearings";
 import { upsertMember } from "#/court/members";
 import { fetchRecord } from "#/court/record";
 import { AGENTS_CATEGORY_ID, conversation, createHearingRoom, discordClient, fetchRecentHumanMessages, findDiscordGuildMember, getCategoryId, sanitizeDiscordMessage, startDiscordTyping } from "#/integrations/discord";
-import { hasPendingHearing, scheduleHearing } from "#/triggers/hearings";
+import { forceStartAnswers, forceStartHearing, hasPendingHearing, scheduleHearing } from "#/triggers/hearings";
 import { logger } from "#/utils/logger";
 import { trigger } from "#/utils/trigger";
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 
 const CONTEXT_MESSAGES = 10;
 const LAWYER_LOOKUP_MESSAGES = 100;
@@ -18,10 +19,16 @@ const REASON_WAIT_MS = 60_000;
 const CONTEXT_LENGTH = 300;
 
 // Replies that can only ping the author, never @everyone, @here or roles:
-const reply = async (message: Message, content: string) => message.reply({
+const reply = async (message: Message, content: string, components?: MessageReplyOptions["components"]) => message.reply({
   content: sanitizeDiscordMessage(content),
   allowedMentions: { parse: [], repliedUser: true },
+  components,
 });
+
+// Under the announcement of a hearing: the member who requested it can open it at once.
+const startNowButton = () => [
+  new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId("hearing-start").setLabel("Ouvrir maintenant").setStyle(ButtonStyle.Primary)),
+];
 
 const authorName = (message: Message) => message.member?.displayName ?? message.author.username;
 
@@ -94,7 +101,7 @@ const openHearing = async (message: Message<true>, accusedIds: string[], crime: 
   });
   scheduleHearing(hearing);
 
-  if (room !== null) await reply(message, `${EMOJI.courthouse} Procès de ${names} pour « ${crime} » : l'audience s'ouvre <t:${String(Math.round(startsAt.getTime() / 1000))}:R>. Rendez-vous dans <#${room.channelId}>.${room.eventUrl === null ? "" : ` Événement : ${room.eventUrl}`}`);
+  if (room !== null) await reply(message, `${EMOJI.courthouse} Procès de ${names} pour « ${crime} » : l'audience s'ouvre <t:${String(Math.round(startsAt.getTime() / 1000))}:R>. Rendez-vous dans <#${room.channelId}>.${room.eventUrl === null ? "" : ` Événement : ${room.eventUrl}`}`, startNowButton());
 };
 
 // Channels with a request being checked: the checks take several seconds, two requests must not both pass them.
@@ -185,6 +192,11 @@ trigger.discordEvent("messageCreate", async (message) => {
 
     const stopRequestTyping = startDiscordTyping(message.channel, () => logger.warn("Could not send the typing indicator"));
     await requestHearing(message, ids, crime, botUser.id, context).finally(stopRequestTyping);
+    return;
+  }
+  if (intent.kind === "start-now") {
+    const result = forceStartHearing(message.channelId, message.author.id);
+    if (result !== "started") await reply(message, forceStartAnswers[result]);
     return;
   }
   if (intent.kind === "show-record") {

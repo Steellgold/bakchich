@@ -11,11 +11,11 @@ const LAWYER_WINDOW_MS = 30 * 60_000;
 // The voice channel stays a few minutes after the verdict, so everyone hears it:
 const CHANNEL_DELETE_DELAY_MS = 5 * 60_000;
 
-// Per text channel: the timer of the hearing waiting for its time, and the hearing whose trial is running.
-const timers = new Map<string, ReturnType<typeof setTimeout>>();
+// Per text channel: the hearing waiting for its time with its timer, and the hearing whose trial is running.
+const pending = new Map<string, { hearing: Hearing; timer: ReturnType<typeof setTimeout> }>();
 const running = new Map<string, Hearing>();
 
-export const hasPendingHearing = (channelId: string) => timers.has(channelId);
+export const hasPendingHearing = (channelId: string) => pending.has(channelId);
 
 const fetchGuild = async () => discordClient.guilds.fetch(ROYAUME_GUILD_ID);
 
@@ -33,7 +33,7 @@ const cancelHearing = async (hearing: Hearing, text: string) => {
 };
 
 const startHearing = async (hearing: Hearing) => {
-  timers.delete(hearing.channelId);
+  pending.delete(hearing.channelId);
 
   const guild = await fetchGuild();
   const found = await Promise.all(hearing.accused.map(async (accused) => ({ accused, member: await findDiscordGuildMember(guild, accused.id, { force: true }) })));
@@ -78,9 +78,31 @@ const start = trigger.safeListener("Hearing start", startHearing);
 
 /** Arm the timer of a hearing: it opens the trial at its time, at once when that time has passed */
 export const scheduleHearing = (hearing: Hearing): void => {
-  timers.set(hearing.channelId, setTimeout(() => {
-    start(hearing);
-  }, Math.max(0, hearing.startsAt.getTime() - Date.now())));
+  pending.set(hearing.channelId, {
+    hearing,
+    timer: setTimeout(() => {
+      start(hearing);
+    }, Math.max(0, hearing.startsAt.getTime() - Date.now())),
+  });
+};
+
+export type ForceStartResult = "started" | "none" | "not-plaintiff";
+
+export const forceStartAnswers: Record<ForceStartResult, string> = {
+  "started": "⚖️ L'audience s'ouvre maintenant.",
+  "none": "⏳ Aucune audience n'attend dans ce salon.",
+  "not-plaintiff": "🚫 Seul celui qui a lancé le procès peut l'ouvrir plus tôt.",
+};
+
+/** Open the waiting hearing of a text channel right now, for the member who requested it only */
+export const forceStartHearing = (channelId: string, requesterId: string): ForceStartResult => {
+  const entry = pending.get(channelId);
+  if (entry === undefined) return "none";
+  if (entry.hearing.plaintiffId !== requesterId) return "not-plaintiff";
+
+  clearTimeout(entry.timer);
+  start(entry.hearing);
+  return "started";
 };
 
 const removeChannel = trigger.safeListener("Hearing channel removal", async (hearing: Hearing) => {

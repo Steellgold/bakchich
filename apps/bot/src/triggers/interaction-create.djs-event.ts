@@ -2,13 +2,20 @@ import type { VoteResult } from "#/court/engine";
 import { court } from "#/court/court";
 import { EMOJI } from "#/court/emojis";
 import { upsertMember } from "#/court/members";
+import { forceStartAnswers, forceStartHearing } from "#/triggers/hearings";
 import { trigger } from "#/utils/trigger";
 import { MessageFlags } from "discord.js";
 
 const TRIAL_OVER = `${EMOJI.hourglass} Ce procès est terminé.`;
 
 trigger.discordEvent("interactionCreate", async (interaction) => {
-  if (!interaction.isButton() || !interaction.customId.startsWith("vote:")) return;
+  if (!interaction.isButton()) return;
+
+  if (interaction.customId === "hearing-start") {
+    await interaction.reply({ content: forceStartAnswers[forceStartHearing(interaction.channelId, interaction.user.id)], flags: MessageFlags.Ephemeral });
+    return;
+  }
+  if (!interaction.customId.startsWith("vote:")) return;
 
   const [, trialId, choice] = interaction.customId.split(":");
   const channelId = interaction.channelId;

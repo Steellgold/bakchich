@@ -33,6 +33,7 @@ const interpretInstructions = dedent`
   You receive a message addressed to the Tribunal. Decide what the author wants:
   - open-trial: they want to put someone, or a group of people, on trial. Put the accusation, in French and in one short phrase, in "crime", or null when the message gives no reason.
   - show-record: they want to see the criminal record of someone.
+  - start-now: they want the hearing waiting in this channel to open right now.
   - chat: anything else.
   Answer with one single JSON object and nothing else, like {"intent":"open-trial","crime":"vol de croissant"} or {"intent":"chat","crime":null}.
 `;
