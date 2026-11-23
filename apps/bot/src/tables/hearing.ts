@@ -13,7 +13,9 @@ export const tableHearing = pgTable("hearing", {
   /** The message the request was a reply to, when there was one */
   context: text("context"),
   startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+  /** Voice channel created by the bot for this hearing, deleted after it */
+  voiceChannelId: text("voice_channel_id"),
   eventId: text("event_id"),
-  status: text("status", { enum: ["scheduled", "started", "cancelled"] }).notNull().default("scheduled"),
+  status: text("status", { enum: ["scheduled", "started", "cancelled", "finished"] }).notNull().default("scheduled"),
   createdAt: columns.createdAt,
 });

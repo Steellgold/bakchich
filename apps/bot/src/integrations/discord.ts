@@ -1,7 +1,7 @@
 import type { Channel, Guild, GuildMember, Message, MessageCreateOptions, SendableChannels } from "discord.js";
 import { env } from "#/utils/env";
 import { logger } from "#/utils/logger";
-import { ActivityType, Client, DiscordAPIError, GatewayIntentBits, GuildScheduledEventEntityType, GuildScheduledEventPrivacyLevel, GuildScheduledEventStatus, Partials, RESTJSONErrorCodes } from "discord.js";
+import { ActivityType, ChannelType, Client, DiscordAPIError, GatewayIntentBits, GuildScheduledEventEntityType, GuildScheduledEventPrivacyLevel, GuildScheduledEventStatus, Partials, RESTJSONErrorCodes } from "discord.js";
 
 export const DISCORD_MAX_MESSAGE_LENGTH = 2000;
 
@@ -83,10 +83,8 @@ export const sendSafeMessage = async (channel: SendableChannels, content: string
   components,
 });
 
-/** Discord event announcing a hearing in the hearings voice channel, null when none is configured or when Discord refuses (the hearing then goes on without an event) */
-export const createHearingEvent = async (guild: Guild, input: { name: string; description: string; startsAt: Date }): Promise<{ id: string; url: string } | null> => {
-  if (env.DISCORD_TRIAL_VOICE_CHANNEL_ID === "") return null;
-
+/** Scheduled event of a hearing in its voice channel, null when Discord refuses (the hearing then goes on without an event) */
+const createHearingEvent = async (guild: Guild, channelId: string, input: { name: string; description: string; startsAt: Date }): Promise<{ id: string; url: string } | null> => {
   try {
     const event = await guild.scheduledEvents.create({
       name: sanitizeDiscordMessage(input.name).slice(0, 100),
@@ -94,13 +92,43 @@ export const createHearingEvent = async (guild: Guild, input: { name: string; de
       scheduledStartTime: input.startsAt,
       privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly,
       entityType: GuildScheduledEventEntityType.Voice,
-      channel: env.DISCORD_TRIAL_VOICE_CHANNEL_ID,
+      channel: channelId,
     });
     return { id: event.id, url: event.url };
   }
   catch (error) {
     logger.warn(`Could not create the hearing event: ${error instanceof Error ? error.message : String(error)}`);
     return null;
+  }
+};
+
+/** Voice channel and event of a hearing, created in the audio category. Null when no category is set or the channel cannot be created: the hearing then opens at once without them. */
+export const createHearingRoom = async (guild: Guild, input: { name: string; description: string; startsAt: Date }): Promise<{ channelId: string; eventId: string | null; eventUrl: string | null } | null> => {
+  if (env.DISCORD_VOICE_CATEGORY_ID === "") return null;
+
+  try {
+    const channel = await guild.channels.create({
+      name: sanitizeDiscordMessage(input.name).slice(0, 100),
+      type: ChannelType.GuildVoice,
+      parent: env.DISCORD_VOICE_CATEGORY_ID,
+      reason: "Tribunal hearing",
+    });
+    const event = await createHearingEvent(guild, channel.id, input);
+    return { channelId: channel.id, eventId: event?.id ?? null, eventUrl: event?.url ?? null };
+  }
+  catch (error) {
+    logger.warn(`Could not create the hearing voice channel: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+};
+
+/** Best effort: only called with channels the bot created for a hearing */
+export const deleteHearingChannel = async (guild: Guild, channelId: string): Promise<void> => {
+  try {
+    await guild.channels.delete(channelId, "Tribunal hearing over");
+  }
+  catch (error) {
+    logger.warn(`Could not delete the hearing channel ${channelId}: ${error instanceof Error ? error.message : String(error)}`);
   }
 };
 

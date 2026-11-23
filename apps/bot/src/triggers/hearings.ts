@@ -1,33 +1,41 @@
 import type { Hearing } from "#/court/hearings";
 import { court } from "#/court/court";
 import { pickLawyer } from "#/court/engine";
-import { fetchScheduledHearings, setHearingStatus } from "#/court/hearings";
+import { fetchUnfinishedHearings, setHearingStatus } from "#/court/hearings";
 import { upsertMember } from "#/court/members";
-import { discordClient, fetchDiscordSendableChannel, fetchRecentHumanMessages, findDiscordGuildMember, ROYAUME_GUILD_ID, sendSafeMessage, setHearingEventStatus } from "#/integrations/discord";
+import { deleteHearingChannel, discordClient, fetchDiscordSendableChannel, fetchRecentHumanMessages, findDiscordGuildMember, ROYAUME_GUILD_ID, sendSafeMessage, setHearingEventStatus } from "#/integrations/discord";
 import { trigger } from "#/utils/trigger";
 
 const LAWYER_LOOKUP_MESSAGES = 100;
 const LAWYER_WINDOW_MS = 30 * 60_000;
+// The voice channel stays a few minutes after the verdict, so everyone hears it:
+const CHANNEL_DELETE_DELAY_MS = 5 * 60_000;
 
-// Per channel: the timer of the hearing waiting for its time, and the event of the trial running there.
+// Per text channel: the timer of the hearing waiting for its time, and the hearing whose trial is running.
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
-const events = new Map<string, string>();
+const running = new Map<string, Hearing>();
 
 export const hasPendingHearing = (channelId: string) => timers.has(channelId);
 
+const fetchGuild = async () => discordClient.guilds.fetch(ROYAUME_GUILD_ID);
+
+/** Close the event and remove the voice channel of a hearing (only ever channels the bot created) */
+const dismantle = async (hearing: Hearing, eventStatus: "canceled" | "completed") => {
+  const guild = await fetchGuild();
+  if (hearing.eventId !== null) await setHearingEventStatus(guild, hearing.eventId, eventStatus);
+  if (hearing.voiceChannelId !== null) await deleteHearingChannel(guild, hearing.voiceChannelId);
+};
+
 const cancelHearing = async (hearing: Hearing, text: string) => {
-  const guild = await discordClient.guilds.fetch(ROYAUME_GUILD_ID);
   await setHearingStatus(hearing.id, "cancelled");
-
-  if (hearing.eventId !== null) await setHearingEventStatus(guild, hearing.eventId, "canceled");
-
+  await dismantle(hearing, "canceled");
   await sendSafeMessage(await fetchDiscordSendableChannel(hearing.channelId), text, []);
 };
 
 const startHearing = async (hearing: Hearing) => {
   timers.delete(hearing.channelId);
 
-  const guild = await discordClient.guilds.fetch(ROYAUME_GUILD_ID);
+  const guild = await fetchGuild();
   const found = await Promise.all(hearing.accused.map(async (accused) => ({ accused, member: await findDiscordGuildMember(guild, accused.id, { force: true }) })));
   const present = found.flatMap(({ member }) => (member === null ? [] : [member]));
 
@@ -56,16 +64,14 @@ const startHearing = async (hearing: Hearing) => {
     return;
   }
 
+  running.set(hearing.channelId, hearing);
   await Promise.all([
     setHearingStatus(hearing.id, "started"),
     ...present.map(async (member) => upsertMember({ id: member.id, name: member.displayName, avatarUrl: member.displayAvatarURL({ extension: "png", size: 128 }) })),
     ...(lawyer === null ? [] : [upsertMember({ ...lawyer, avatarUrl: null })]),
   ]);
 
-  if (hearing.eventId !== null) {
-    events.set(hearing.channelId, hearing.eventId);
-    await setHearingEventStatus(guild, hearing.eventId, "active");
-  }
+  if (hearing.eventId !== null) await setHearingEventStatus(guild, hearing.eventId, "active");
 };
 
 const start = trigger.safeListener("Hearing start", startHearing);
@@ -77,14 +83,32 @@ export const scheduleHearing = (hearing: Hearing): void => {
   }, Math.max(0, hearing.startsAt.getTime() - Date.now())));
 };
 
-/** Close the Discord event of a hearing once its trial has ended */
-export const completeHearingEvent = async (channelId: string): Promise<void> => {
-  const eventId = events.get(channelId);
-  events.delete(channelId);
-  if (eventId !== undefined) await setHearingEventStatus(await discordClient.guilds.fetch(ROYAUME_GUILD_ID), eventId, "completed");
+const removeChannel = trigger.safeListener("Hearing channel removal", async (hearing: Hearing) => {
+  if (hearing.voiceChannelId !== null) await deleteHearingChannel(await fetchGuild(), hearing.voiceChannelId);
+});
+
+/** Once the trial of a text channel has ended: the event is completed and the voice channel goes after a delay */
+export const completeHearing = async (channelId: string): Promise<void> => {
+  const hearing = running.get(channelId);
+  running.delete(channelId);
+  if (hearing === undefined) return;
+
+  await setHearingStatus(hearing.id, "finished");
+  if (hearing.eventId !== null) await setHearingEventStatus(await fetchGuild(), hearing.eventId, "completed");
+  setTimeout(() => {
+    removeChannel(hearing);
+  }, CHANNEL_DELETE_DELAY_MS);
 };
 
-// Hearings still waiting when the bot restarted are armed again once Discord is ready:
+// When Discord is ready after a restart: hearings still waiting are armed again, and the ones that were running lost their trial with the restart, so their event and channel are cleaned up.
 discordClient.once("clientReady", trigger.safeListener("Hearings restore", async () => {
-  for (const hearing of await fetchScheduledHearings()) scheduleHearing(hearing);
+  for (const hearing of await fetchUnfinishedHearings()) {
+    if (hearing.status === "scheduled") {
+      scheduleHearing(hearing);
+      continue;
+    }
+
+    await setHearingStatus(hearing.id, "finished");
+    await dismantle(hearing, "completed");
+  }
 }));

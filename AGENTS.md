@@ -5,7 +5,7 @@ A Discord bot for the « Le Royaume » community: members put each other on tria
 ## Key Patterns
 
 - **Code decides, AI talks** – the court engine owns every rule (phases, timers, votes, verdict, records). The AI writes text from facts the code gives it and may return a structured intent (open a trial, show a record, chat) that the code validates before acting. It never calls Discord or the database itself.
-- **Limited Discord writes** – the bot sends messages, edits its own messages, shows the typing indicator, answers button interactions and manages the scheduled events of its hearings in `DISCORD_TRIAL_VOICE_CHANNEL_ID`. Nothing else.
+- **Limited Discord writes** – the bot sends messages, edits its own messages, shows the typing indicator, answers button interactions and creates a voice channel and a scheduled event for each hearing in the audio category (`DISCORD_VOICE_CATEGORY_ID`) and deletes the channels it created. Nothing else.
 - **Stupid on purpose** – the tone is a ridiculous, corrupt judge. Never serious, never moralizing.
 
 ## Agent approach
@@ -79,4 +79,4 @@ Next.js App Router: `app/` (routes, `.tsx`), `components/` (React components), `
 
 ### Confirmed exceptions
 
-The server owners confirmed that the bot may create scheduled events and voice channels in the AGENTS category or in the audio category, as long as it does not disturb members (no spam). The AGENTS category exists so members can mute the bot in one action. The three-step workflow above remains required for any other create, update or delete action.
+The server owners confirmed that the bot may create scheduled events and voice channels in the AGENTS category or in the audio category, as long as it does not disturb members (no spam). The AGENTS category exists so members can mute the bot in one action. The bot only deletes voice channels it created itself for a hearing. The three-step workflow above remains required for any other create, update or delete action.

@@ -1,6 +1,6 @@
 import { tableHearing } from "#/tables/hearing";
 import { postgres } from "#/utils/postgres";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 export type Hearing = typeof tableHearing.$inferSelect;
 
@@ -10,8 +10,9 @@ export const saveHearing = async (input: Omit<typeof tableHearing.$inferInsert, 
   return saved;
 };
 
-export const fetchScheduledHearings = async (): Promise<Hearing[]> => postgres.select().from(tableHearing).where(eq(tableHearing.status, "scheduled"));
+/** Hearings waiting for their time, or whose trial was running when the bot stopped */
+export const fetchUnfinishedHearings = async (): Promise<Hearing[]> => postgres.select().from(tableHearing).where(inArray(tableHearing.status, ["scheduled", "started"]));
 
-export const setHearingStatus = async (id: string, status: "started" | "cancelled"): Promise<void> => {
+export const setHearingStatus = async (id: string, status: "started" | "cancelled" | "finished"): Promise<void> => {
   await postgres.update(tableHearing).set({ status }).where(eq(tableHearing.id, id));
 };

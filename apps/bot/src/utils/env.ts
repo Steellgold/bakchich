@@ -13,8 +13,8 @@ const schema = z.object({
   OPENROUTER_API_KEY: z.string(),
   OPENROUTER_MODELS: z.string().default(""),
 
-  // Voice channel of the hearing events, empty to open trials at once without any event:
-  DISCORD_TRIAL_VOICE_CHANNEL_ID: z.string().default(""),
+  // Audio category where the bot creates the voice channel of each hearing (« Le Royaume » by default), empty to open trials at once without channel or event:
+  DISCORD_VOICE_CATEGORY_ID: z.string().default("1572558769139752960"),
 
   PIPER_URL: z.url().default("http://localhost:5000"),
 

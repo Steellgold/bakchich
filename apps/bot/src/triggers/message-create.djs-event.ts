@@ -7,9 +7,8 @@ import { countActiveMembers, hearingDelayMs } from "#/court/hearing";
 import { saveHearing } from "#/court/hearings";
 import { upsertMember } from "#/court/members";
 import { fetchRecord } from "#/court/record";
-import { AGENTS_CATEGORY_ID, conversation, createHearingEvent, discordClient, fetchRecentHumanMessages, findDiscordGuildMember, getCategoryId, sanitizeDiscordMessage, startDiscordTyping } from "#/integrations/discord";
+import { AGENTS_CATEGORY_ID, conversation, createHearingRoom, discordClient, fetchRecentHumanMessages, findDiscordGuildMember, getCategoryId, sanitizeDiscordMessage, startDiscordTyping } from "#/integrations/discord";
 import { hasPendingHearing, scheduleHearing } from "#/triggers/hearings";
-import { env } from "#/utils/env";
 import { logger } from "#/utils/logger";
 import { trigger } from "#/utils/trigger";
 
@@ -76,10 +75,11 @@ const openHearing = async (message: Message<true>, accusedIds: string[], crime: 
     return;
   }
 
-  // Without a hearings voice channel, the trial opens at once and no event is created:
-  const delay = env.DISCORD_TRIAL_VOICE_CHANNEL_ID === "" ? 0 : hearingDelayMs(countActiveMembers(recent.authors, Date.now()));
-  const startsAt = new Date(Date.now() + delay);
-  const event = await createHearingEvent(message.guild, { name: `Procès de ${names}`, description: context === null ? crime : `${crime}\n\n${context}`, startsAt });
+  // The voice channel and its event come first: without them (no audio category, or Discord refusing), the trial opens at once.
+  const now = Date.now();
+  const wait = hearingDelayMs(countActiveMembers(recent.authors, now));
+  const room = await createHearingRoom(message.guild, { name: `Procès de ${names}`, description: context === null ? crime : `${crime}\n\n${context}`, startsAt: new Date(now + wait) });
+  const startsAt = new Date(room === null ? now : now + wait);
 
   const hearing = await saveHearing({
     channelId: message.channelId,
@@ -89,11 +89,12 @@ const openHearing = async (message: Message<true>, accusedIds: string[], crime: 
     crime,
     context,
     startsAt,
-    eventId: event?.id ?? null,
+    voiceChannelId: room?.channelId ?? null,
+    eventId: room?.eventId ?? null,
   });
   scheduleHearing(hearing);
 
-  if (delay > 0) await reply(message, `${EMOJI.courthouse} Procès de ${names} pour « ${crime} » : l'audience s'ouvre <t:${String(Math.round(startsAt.getTime() / 1000))}:R>.${event === null ? "" : ` Rendez-vous sur l'événement : ${event.url}`}`);
+  if (room !== null) await reply(message, `${EMOJI.courthouse} Procès de ${names} pour « ${crime} » : l'audience s'ouvre <t:${String(Math.round(startsAt.getTime() / 1000))}:R>. Rendez-vous dans <#${room.channelId}>.${room.eventUrl === null ? "" : ` Événement : ${room.eventUrl}`}`);
 };
 
 // Channels with a request being checked: the checks take several seconds, two requests must not both pass them.
