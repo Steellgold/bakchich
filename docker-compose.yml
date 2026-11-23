@@ -1,14 +1,57 @@
+# Production stack on the VPS: docker compose up -d --build
 services:
   postgres:
     image: postgres:17
+    restart: unless-stopped
     environment:
       POSTGRES_USER: tribunal
-      POSTGRES_PASSWORD: tribunal
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: tribunal
-    ports:
-      - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
+  bot:
+    build:
+      context: .
+      dockerfile: apps/bot/Dockerfile
+    restart: unless-stopped
+    env_file: apps/bot/.env
+    environment:
+      POSTGRESQL_URL: postgres://tribunal:${POSTGRES_PASSWORD}@postgres:5432/tribunal
+      ROOM_PORT: "3001"
+      WEB_INTERNAL_URL: http://web:3000
+    depends_on:
+      - postgres
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    env_file: apps/web/.env
+    environment:
+      POSTGRESQL_URL: postgres://tribunal:${POSTGRES_PASSWORD}@postgres:5432/tribunal
+      BETTER_AUTH_URL: https://tribunal.gaetanhus.fr
+      ROOM_WS_URL: wss://tribunal.gaetanhus.fr/ws
+    depends_on:
+      - postgres
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - bot
+      - web
+
 volumes:
   postgres-data:
+  caddy-data:
+  caddy-config:

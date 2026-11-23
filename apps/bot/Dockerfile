@@ -1,15 +1,16 @@
+# Build context: repository root (see docker-compose.yml).
 FROM node:24-alpine
 WORKDIR /app
 
-# Install PNPM:
 RUN npm install -g pnpm
 
-# Install dependencies:
-COPY ./package.json ./pnpm-lock.yaml ./pnpm-workspace.yaml ./
-RUN pnpm install --frozen-lockfile
+# Workspace manifests first, for a cached dependency layer:
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/bot/package.json apps/bot/
+COPY apps/web/package.json apps/web/
+RUN pnpm install --frozen-lockfile --filter @tribunal/bot
 
-# Copy all folders and files:
-COPY . .
+COPY apps/bot apps/bot
 
-# Run the server:
-CMD pnpm run start
+WORKDIR /app/apps/bot
+CMD ["pnpm", "run", "start"]

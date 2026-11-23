@@ -1,24 +1,47 @@
 # Tribunal
 
-Discord bot for the « Le Royaume » server: members drag each other in front of a corrupt AI judge for absurd crimes. The room debates and votes, the judge delivers the verdict, and every conviction ends up in a permanent criminal record.
+Discord bot for the « Le Royaume » server: members drag each other in front of a corrupt AI judge for absurd crimes. The room debates and votes, the judge delivers the verdict, and every conviction ends up in a permanent criminal record. A 3D courtroom website lets members log in with Discord, walk around, watch the trial live and vote.
 
-Trials only run inside the AGENTS category. Everything shown on Discord is in French.
+Trials only run inside the AGENTS category. Everything shown to users is in French.
+
+## Apps
+
+- `apps/bot`: Discord bot, court engine and courtroom WebSocket server.
+- `apps/web`: Next.js website with Discord login (BetterAuth) and the 3D courtroom.
 
 ## Commands
 
 - `@Tribunal procès @member pour <crime>`: opens a trial (5 min of debate, 2 min of voting).
 - `@Tribunal casier @member`: shows the member's criminal record.
 
+## Discord application
+
+- Bot: enable the **Message Content** privileged intent and invite the bot to the server.
+- OAuth2: add the redirect URLs `http://localhost:3000/api/auth/callback/discord` (local) and `https://tribunal.gaetanhus.fr/api/auth/callback/discord` (production).
+
 ## Run locally
 
 ```bash
 cp apps/bot/.env.example apps/bot/.env   # then fill in the values
-docker compose up -d   # Postgres
+cp apps/web/.env.example apps/web/.env   # then fill in the values
+docker compose -f docker-compose.dev.yml up -d   # Postgres
 pnpm install
+pnpm --filter @tribunal/web run db:migrate   # BetterAuth tables (the bot migrates its own tables at startup)
 pnpm --filter @tribunal/bot run dev
+pnpm --filter @tribunal/web run dev
 ```
 
+Then open `http://localhost:3000`.
+
 Checks: `pnpm run ts:check`, `pnpm run lint:fix`, `pnpm run test`.
+
+## Deploy on the VPS
+
+1. DNS: an `A` record (and `AAAA` for IPv6) `tribunal.gaetanhus.fr` pointing to the VPS. Caddy gets the HTTPS certificate by itself.
+2. Copy `.env.example` to `.env` (Postgres password), and fill `apps/bot/.env` and `apps/web/.env`. Database URLs, `BETTER_AUTH_URL` and `ROOM_WS_URL` are set by `docker-compose.yml`.
+3. `docker compose up -d --build`
+
+Caddy serves the website and routes `/ws` to the bot, on the same domain.
 
 ## Credits
 
