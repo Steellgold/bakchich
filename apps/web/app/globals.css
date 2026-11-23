@@ -33,3 +33,76 @@ html, body {
   text-decoration: none;
   cursor: pointer;
 }
+
+.room {
+  position: fixed;
+  inset: 0;
+}
+
+.hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 16px;
+}
+
+.hud-panel, .hud-vote, .hud-hints {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  background: rgb(0 0 0 / 0.6);
+  pointer-events: auto;
+}
+
+.hud-vote {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  align-self: center;
+}
+
+.hud-hints {
+  font-size: 14px;
+  opacity: 0.85;
+}
+
+.verdict {
+  color: #f1c40f;
+}
+
+.button.innocent {
+  background: #27ae60;
+}
+
+.tag {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.name {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 0.55);
+  font-size: 12px;
+}
+
+.bubble {
+  max-width: 220px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: #f3ead8;
+  color: #1e1b16;
+  font-size: 13px;
+  white-space: normal;
+}

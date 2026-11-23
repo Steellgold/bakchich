@@ -11,19 +11,23 @@
     "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
+    "@react-three/drei": "10.7.9",
+    "@react-three/fiber": "9.8.2",
     "@tribunal/bot": "workspace:*",
     "better-auth": "^1.7.27",
     "drizzle-orm": "^0.45.4",
     "next": "^16.4.6",
     "pg": "^8.23.1",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "three": "0.187.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
     "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/three": "0.187.0",
     "@typescript/native": "npm:typescript@^7.0.2",
     "drizzle-kit": "^0.31.11",
     "typescript": "npm:@typescript/typescript6@^6.0.2"

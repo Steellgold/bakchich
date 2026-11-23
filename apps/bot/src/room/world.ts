@@ -25,6 +25,9 @@ const insideRoom = (point: Vec2) => Math.abs(point.x) <= ROOM.width / 2 - PLAYER
 const collides = (point: Vec2) => OBSTACLES.some((box) => point.x > box.min.x - PLAYER_RADIUS && point.x < box.max.x + PLAYER_RADIUS
   && point.z > box.min.z - PLAYER_RADIUS && point.z < box.max.z + PLAYER_RADIUS);
 
+/** Whether a standing character may be at this point, shared with the client for its local prediction */
+export const canStand = (point: Vec2, hasRole: boolean): boolean => insideRoom(point) && !collides(point) && (hasRole || !inRestrictedZone(point));
+
 const roleOf = (trial: Trial | null, id: string): Role | null => {
   if (trial === null) return null;
   if (trial.accused.id === id) return "accused";
@@ -72,10 +75,7 @@ export class World {
     const scale = length > maxLength ? maxLength / length : 1;
     const next = { x: state.position.x + dx * scale, z: state.position.z + dz * scale };
 
-    if (!insideRoom(next) || collides(next)) return;
-    if (inRestrictedZone(next) && state.role === null) return;
-
-    state.position = next;
+    if (canStand(next, state.role !== null)) state.position = next;
   }
 
   public becomeJuror(id: string): "seated" | "too-far" | "full" {
