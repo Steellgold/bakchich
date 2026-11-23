@@ -11,6 +11,7 @@
 
 # Environment variables and secrets files:
 **/.env*
+!**/.env.example
 
 # Builds:
 **/build

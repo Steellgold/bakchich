@@ -1,34 +1,16 @@
 {
+  "name": "tribunal",
+  "private": true,
   "type": "module",
   "scripts": {
-    "start": "node --import @swc-node/register/esm-register ./src/main.ts",
-    "dev": "nodemon -q -w ./src/ --exec node --import @swc-node/register/esm-register ./src/main.ts",
-    "test": "node --import @swc-node/register/esm-register --test \"src/**/*.test.ts\"",
-    "db:migration:create": "drizzle-kit generate",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "ts:check": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@openrouter/ai-sdk-provider": "^3.1.0",
-    "ai": "^7.0.168",
-    "dayjs": "^1.11.23",
-    "dedent": "^1.7.2",
-    "discord.js": "^14.28.1",
-    "dotenv": "^18.0.10",
-    "drizzle-orm": "^0.45.4",
-    "pg": "^8.23.1",
-    "zod": "^4.6.7"
+    "ts:check": "pnpm -r run ts:check",
+    "test": "pnpm -r run test"
   },
   "devDependencies": {
     "@bluzzi/eslint-config": "^2.4.2",
-    "@swc-node/register": "^1.12.1",
-    "@types/node": "^26.6.6",
-    "@types/pg": "^8.23.1",
-    "@typescript/native": "npm:typescript@^7.0.2",
-    "drizzle-kit": "^0.31.11",
     "eslint": "^10.14.0",
-    "nodemon": "^3.1.14",
     "typescript": "npm:@typescript/typescript6@^6.0.2"
   }
 }

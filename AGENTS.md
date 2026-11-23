@@ -22,22 +22,33 @@ A Discord bot for the « Le Royaume » community: members put each other on tria
   Other package managers MUST NOT be used.
 
 - **TypeScript 7** and **ESLint** (`@bluzzi/eslint-config`) are used to enforce code quality.
-  After any codebase update, the following commands MUST be executed and all reported errors MUST be fixed:
-  - `pnpm run ts:check` — checks for TypeScript errors.
+  After any codebase update, the following commands MUST be executed from the repository root and all reported errors MUST be fixed:
+  - `pnpm run ts:check` — checks for TypeScript errors in every app.
   - `pnpm run lint:fix` — automatically fixes ESLint errors when possible and reports remaining ones.
-  - `pnpm run test` — runs the `node:test` suites (`src/**/*.test.ts`).
+  - `pnpm run test` — runs the `node:test` suites of every app.
 
 ## Project Structure
 
-Flat layout under `/src`: only folders, only `.ts` files inside them, one `main.ts` at the root.
+pnpm monorepo with exactly two apps, no shared package:
 
-- `src/court` — The court: Discord-free engine (trials, timers, votes, verdicts), command parsing, AI judge, trial records.
+### `apps/bot` — Discord bot, court engine and room server
+
+Flat layout under `apps/bot/src`: only folders, only `.ts` files inside them, one `main.ts` at the root.
+
+- `src/court` — The court: Discord-free engine (trials, timers, votes, verdicts), command parsing, AI judge, trial records, known members.
+- `src/room` — The 3D courtroom: layout, Discord-free world simulation (positions, zones, seats) and WebSocket protocol.
 - `src/tables` — Drizzle schema, one file per table.
-- `src/integrations` — One file per external system (Discord, OpenRouter): clients, SDK singletons and low-level helpers.
-- `src/triggers` — Entry points (Discord events) translating Discord into court calls and court events into Discord messages.
+- `src/integrations` — One file per external system (Discord, OpenRouter, web session): clients, SDK singletons and low-level helpers.
+- `src/triggers` — Entry points (Discord events, room WebSocket server) translating the outside world into court and room calls.
 - `src/utils` — Shared helpers, including `postgres` for the Drizzle client, migrations and reusable columns.
 
-Dependencies flow one way: `triggers → court / tables / integrations → utils`. No file-level import cycles.
+Dependencies flow one way: `triggers → court / room / tables / integrations → utils`. No file-level import cycles.
+
+Files imported by `apps/web` (`src/room/layout.ts`, `src/room/protocol.ts`, `src/court/engine.ts`) MUST use relative imports only, never the `#/` alias.
+
+### `apps/web` — website, Discord login and 3D client
+
+Next.js App Router: `app/` (routes, `.tsx`), `components/` (React components), `lib/` (auth, database, hooks). It imports the room layout and protocol types from `@tribunal/bot`.
 
 ## Global Guidelines
 

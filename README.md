@@ -12,10 +12,10 @@ Trials only run inside the AGENTS category. Everything shown on Discord is in Fr
 ## Run locally
 
 ```bash
-cp .env.example .env   # then fill in the values
+cp apps/bot/.env.example apps/bot/.env   # then fill in the values
 docker compose up -d   # Postgres
 pnpm install
-pnpm run dev
+pnpm --filter @tribunal/bot run dev
 ```
 
 Checks: `pnpm run ts:check`, `pnpm run lint:fix`, `pnpm run test`.
