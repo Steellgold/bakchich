@@ -1,3 +1,4 @@
+import type { VoiceConnection } from "@discordjs/voice";
 import type { Guild } from "discord.js";
 import { AudioPlayerStatus, createAudioPlayer, createAudioResource, entersState, getVoiceConnection, joinVoiceChannel, StreamType, VoiceConnectionStatus } from "@discordjs/voice";
 import { Readable } from "node:stream";
@@ -6,6 +7,26 @@ const OUTPUT_RATE = 48_000;
 const JOIN_TIMEOUT_MS = 10_000;
 const START_TIMEOUT_MS = 5_000;
 const MAX_SPEECH_MS = 120_000;
+
+/** Discord IDs of the members talking in the hearing voice channel, plus "judge" and the AI lawyer ID while their voice plays: the courtroom animates them */
+export const speakingIds = new Set<string>();
+
+const watched = new WeakSet<VoiceConnection>();
+
+/** Join the voice channel and follow who is speaking in it (no audio is received or kept, only the speaking state) */
+export const watchSpeakers = async (guild: Guild, channelId: string): Promise<void> => {
+  const connection = joinVoiceChannel({ channelId, guildId: guild.id, adapterCreator: guild.voiceAdapterCreator, selfDeaf: false });
+  await entersState(connection, VoiceConnectionStatus.Ready, JOIN_TIMEOUT_MS);
+  if (watched.has(connection)) return;
+
+  watched.add(connection);
+  connection.receiver.speaking.on("start", (userId) => {
+    speakingIds.add(userId);
+  });
+  connection.receiver.speaking.on("end", (userId) => {
+    speakingIds.delete(userId);
+  });
+};
 
 /** 16-bit PCM WAV to the raw 48 kHz stereo 16-bit PCM that Discord voice plays (linear resampling, first channel only) */
 const toDiscordPcm = (wav: Buffer): Buffer => {
@@ -28,7 +49,7 @@ const toDiscordPcm = (wav: Buffer): Buffer => {
 };
 
 /** Join the voice channel and play a WAV in it, resolving when it ends */
-export const playInVoice = async (guild: Guild, channelId: string, wav: Buffer): Promise<void> => {
+export const playInVoice = async (guild: Guild, channelId: string, wav: Buffer, speakerId: string): Promise<void> => {
   const connection = joinVoiceChannel({ channelId, guildId: guild.id, adapterCreator: guild.voiceAdapterCreator, selfDeaf: false });
   await entersState(connection, VoiceConnectionStatus.Ready, JOIN_TIMEOUT_MS);
 
@@ -37,10 +58,17 @@ export const playInVoice = async (guild: Guild, channelId: string, wav: Buffer):
   player.play(createAudioResource(Readable.from(toDiscordPcm(wav)), { inputType: StreamType.Raw }));
 
   // A new player starts idle: wait for it to play, then to end.
-  await entersState(player, AudioPlayerStatus.Playing, START_TIMEOUT_MS);
-  await entersState(player, AudioPlayerStatus.Idle, MAX_SPEECH_MS);
+  speakingIds.add(speakerId);
+  try {
+    await entersState(player, AudioPlayerStatus.Playing, START_TIMEOUT_MS);
+    await entersState(player, AudioPlayerStatus.Idle, MAX_SPEECH_MS);
+  }
+  finally {
+    speakingIds.delete(speakerId);
+  }
 };
 
 export const leaveVoice = (guildId: string): void => {
   getVoiceConnection(guildId)?.destroy();
+  speakingIds.clear();
 };

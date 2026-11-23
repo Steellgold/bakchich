@@ -43,7 +43,7 @@ const aiDefends = async (trial: Trial, stage: "opening" | "closing") => {
 
   await sendSafeMessage(channel, `${EMOJI.unbalancedScales} **${AI_LAWYER.name}** : ${text}`, []);
   court.say(trial.channelId, AI_LAWYER.id, text);
-  judgeSays(trial.channelId, text);
+  judgeSays(trial.channelId, text, AI_LAWYER.id);
 };
 
 const closeDefense = trigger.safeListener("AI lawyer closing", async (trial: Trial) => {

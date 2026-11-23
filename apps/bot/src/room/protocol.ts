@@ -21,7 +21,7 @@ export type Npc = { id: string; name: string; avatarUrl: string | null; seatId: 
 
 export type ServerMessage
   = | { type: "welcome"; selfId: string }
-    | { type: "snapshot"; players: PlayerState[]; npcs: Npc[]; trial: TrialView | null }
+    | { type: "snapshot"; players: PlayerState[]; npcs: Npc[]; trial: TrialView | null; speaking: string[] }
   /** speakerId null is the judge */
     | { type: "speech"; speakerId: string | null; text: string }
   /** Official verdict line built by the code */

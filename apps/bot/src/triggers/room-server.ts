@@ -9,6 +9,7 @@ import { formatVerdictLine } from "#/court/judge";
 import { listKnownMembers, upsertMember } from "#/court/members";
 import { AGENTS_CATEGORY_ID, discordClient, findDiscordGuildMember, ROYAUME_GUILD_ID } from "#/integrations/discord";
 import { fetchSession } from "#/integrations/session";
+import { speakingIds } from "#/integrations/voice";
 import { authorizeConnection } from "#/room/access";
 import { SEATS, TICK_MS } from "#/room/layout";
 import { parseClientMessage } from "#/room/protocol";
@@ -215,7 +216,7 @@ setInterval(() => {
   displayed = pickDisplayedTrial(displayed, court.list());
   world.setTrial(displayed);
   const players = world.players();
-  broadcast({ type: "snapshot", players, npcs: npcs(), trial: displayed === null ? null : trialView(displayed) });
+  broadcast({ type: "snapshot", players, npcs: npcs(), speaking: [...speakingIds], trial: displayed === null ? null : trialView(displayed) });
 }, TICK_MS);
 
 setInterval(trigger.safeListener("Room known members refresh", refreshKnownMembers), KNOWN_MEMBERS_REFRESH_MS);

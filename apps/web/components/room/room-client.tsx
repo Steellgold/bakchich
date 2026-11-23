@@ -77,6 +77,7 @@ export const RoomClient = ({ url, token }: { url: string; token?: string }) => {
 
   const self = snapshot?.players.find((player) => player.id === selfId);
   const occupiedSeats = new Set(snapshot?.players.map((player) => player.seatId));
+  const speaking = new Set(snapshot?.speaking);
 
   return (
     <div className="room">
@@ -86,12 +87,12 @@ export const RoomClient = ({ url, token }: { url: string; token?: string }) => {
         <directionalLight position={[6, 14, 10]} intensity={2.2} castShadow />
         <Courtroom />
 
-        <Character id={SEATS.judge.id} name="Le Juge" avatarUrl={null} position={SEATS.judge.position} rotation={SEATS.judge.rotation} seated speech={latestSpeech(speeches, null)} color="#8e5bff" elevation={1.05} wig />
+        <Character id={SEATS.judge.id} name="Le Juge" avatarUrl={null} position={SEATS.judge.position} rotation={SEATS.judge.rotation} seated speech={latestSpeech(speeches, null)} speaking={speaking.has("judge")} color="#8e5bff" elevation={1.05} wig />
 
         {snapshot?.npcs.map((npc) => {
           const seat = seatById.get(npc.seatId);
           if (seat === undefined) return null;
-          return <Character key={npc.id} id={npc.id} name={npc.name} avatarUrl={npc.avatarUrl} position={seat.position} rotation={seat.rotation} seated onBench={isBenchSeat(npc.seatId)} speech={latestSpeech(speeches, npc.id)} />;
+          return <Character key={npc.id} id={npc.id} name={npc.name} avatarUrl={npc.avatarUrl} position={seat.position} rotation={seat.rotation} seated onBench={isBenchSeat(npc.seatId)} speech={latestSpeech(speeches, npc.id)} speaking={speaking.has(npc.id)} />;
         })}
 
         {snapshot?.players.filter((player) => player.id !== selfId).map((player) => (
@@ -105,6 +106,7 @@ export const RoomClient = ({ url, token }: { url: string; token?: string }) => {
             seated={player.seatId !== null}
             onBench={isBenchSeat(player.seatId)}
             speech={latestSpeech(speeches, player.id)}
+            speaking={speaking.has(player.id)}
             interpolate
           />
         ))}
@@ -113,7 +115,7 @@ export const RoomClient = ({ url, token }: { url: string; token?: string }) => {
           <LeavingCharacter key={player.id} player={player} onDone={(id) => setLeaving((list) => list.filter((entry) => entry.id !== id))} />
         ))}
 
-        {self !== undefined && <PlayerController self={self} trial={snapshot?.trial ?? null} speech={latestSpeech(speeches, self.id)} send={send} occupiedSeats={occupiedSeats} onInteraction={setInteraction} />}
+        {self !== undefined && <PlayerController self={self} trial={snapshot?.trial ?? null} speech={latestSpeech(speeches, self.id)} speaking={speaking.has(self.id)} send={send} occupiedSeats={occupiedSeats} onInteraction={setInteraction} />}
       </Canvas>
 
       <Hud trial={snapshot?.trial ?? null} verdict={verdict} voteResult={voteResult} interaction={interaction} seated={(self?.seatId ?? null) !== null} send={send} />

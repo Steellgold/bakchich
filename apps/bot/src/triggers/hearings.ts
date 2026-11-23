@@ -6,7 +6,7 @@ import { fetchUnfinishedHearings, setHearingLawyer, setHearingStatus } from "#/c
 import { upsertMember } from "#/court/members";
 import { createPreparationRoom, deleteHearingChannel, discordClient, fetchDiscordSendableChannel, findDiscordGuildMember, ROYAUME_GUILD_ID, sendSafeMessage, setHearingEventStatus } from "#/integrations/discord";
 import { speak } from "#/integrations/piper";
-import { leaveVoice, playInVoice } from "#/integrations/voice";
+import { leaveVoice, playInVoice, watchSpeakers } from "#/integrations/voice";
 import { attempt } from "#/utils/attempt";
 import { logger } from "#/utils/logger";
 import { trigger } from "#/utils/trigger";
@@ -55,6 +55,10 @@ const cancelHearing = async (hearing: Hearing, text: string) => {
   await sendSafeMessage(await fetchDiscordSendableChannel(hearing.channelId), text, []);
 };
 
+const watch = trigger.safeListener("Voice speakers", async (voiceChannelId: string) => {
+  await watchSpeakers(await fetchGuild(), voiceChannelId);
+});
+
 /** Open the trial itself once the defense is ready */
 const openTrial = async (hearing: Hearing, accused: Member[], context: string[]) => {
   const guild = await fetchGuild();
@@ -71,6 +75,7 @@ const openTrial = async (hearing: Hearing, accused: Member[], context: string[])
   }
 
   running.set(hearing.channelId, { ...hearing, defenseContext: context });
+  if (hearing.voiceChannelId !== null) watch(hearing.voiceChannelId);
   await Promise.all([
     setHearingStatus(hearing.id, "started"),
     ...(hearing.lawyer === null || hearing.lawyer.id === AI_LAWYER.id ? [] : [upsertMember({ ...hearing.lawyer, avatarUrl: null })]),
@@ -218,20 +223,20 @@ export const voiceChannelOf = (channelId: string): string | null => running.get(
 // Speeches follow each other in the voice channel instead of talking over one another:
 let speaking: Promise<void> = Promise.resolve();
 
-const sayNow = async (voiceChannelId: string, text: string) => {
-  const result = await attempt(async () => playInVoice(await fetchGuild(), voiceChannelId, await speak(text)));
+const sayNow = async (voiceChannelId: string, text: string, speakerId: string) => {
+  const result = await attempt(async () => playInVoice(await fetchGuild(), voiceChannelId, await speak(text), speakerId));
   if (!result.ok) logger.error("Judge voice error:", result.error instanceof Error ? result.error.stack : String(result.error));
 };
 
-const queueSpeech = async (previous: Promise<void>, voiceChannelId: string, text: string) => {
+const queueSpeech = async (previous: Promise<void>, voiceChannelId: string, text: string, speakerId: string) => {
   await previous;
-  await sayNow(voiceChannelId, text);
+  await sayNow(voiceChannelId, text, speakerId);
 };
 
 /** The judge (or the AI lawyer) speaks out loud in the voice channel of the trial of a text channel, nothing happens without one */
-export const judgeSays = (channelId: string, text: string): void => {
+export const judgeSays = (channelId: string, text: string, speakerId = "judge"): void => {
   const voiceChannelId = voiceChannelOf(channelId);
-  if (voiceChannelId !== null) speaking = queueSpeech(speaking, voiceChannelId, text);
+  if (voiceChannelId !== null) speaking = queueSpeech(speaking, voiceChannelId, text, speakerId);
 };
 
 /** Once the trial of a text channel has ended: the event is completed and the voice channel goes after a delay */

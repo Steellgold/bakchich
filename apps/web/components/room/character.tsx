@@ -23,6 +23,8 @@ type CharacterProps = {
   elevation?: number;
   /** Judge's powdered wig */
   wig?: boolean;
+  /** The member is talking: the arms gesture */
+  speaking?: boolean;
   /** Smoothly follow the given position (remote players) instead of jumping to it */
   interpolate?: boolean;
   /** Position read every frame (local player prediction), overriding `position` */
@@ -121,16 +123,48 @@ const facetGeometry = (geometry: BufferGeometry) => {
   geometry.computeVertexNormals();
 };
 
+type ArmPose = { x: number; outward: number; wobble?: number };
+type Gesture = { left: ArmPose; right: ArmPose };
+
+const IDLE: ArmPose = { x: 0, outward: 0.07 };
+
+// Gestures an arm can make while talking, x raises it forward and outward spreads it from the body:
+const gestures: Record<string, Gesture> = {
+  explain: { left: IDLE, right: { x: -1.3, outward: 0.35, wobble: 0.25 } },
+  open: { left: { x: -0.7, outward: 0.9, wobble: 0.1 }, right: { x: -0.7, outward: 0.9, wobble: 0.1 } },
+  point: { left: IDLE, right: { x: -1.5, outward: 0.1, wobble: 0.05 } },
+  cross: { left: { x: -1.1, outward: -0.75, wobble: 0.04 }, right: { x: -1.1, outward: -0.75, wobble: 0.04 } },
+  chop: { left: IDLE, right: { x: -1, outward: 0.2, wobble: 0.45 } },
+  emphasis: { left: { x: -1, outward: 0.5, wobble: 0.3 }, right: { x: -1, outward: 0.5, wobble: 0.3 } },
+};
+
+// Each member talks with one pack of gestures, picked from their appearance:
+const gesturePacks: Gesture[][] = [
+  [gestures.explain, gestures.open, gestures.point],
+  [gestures.cross, gestures.explain, gestures.emphasis],
+  [gestures.chop, gestures.emphasis, gestures.open, gestures.point],
+  [gestures.open, gestures.cross, gestures.chop],
+].map((pack) => pack.filter((gesture): gesture is Gesture => gesture !== undefined));
+
+const GESTURE_SECONDS = 2.4;
+
 /** Robed low-poly member with a stable appearance, a white jabot and a Discord lapel badge. */
-export const Character = ({ id, name, avatarUrl, position, rotation, seated, onBench = false, speech, color, elevation = 0, wig = false, interpolate = false, follow }: CharacterProps) => {
+export const Character = ({ id, name, avatarUrl, position, rotation, seated, onBench = false, speech, color, elevation = 0, wig = false, speaking = false, interpolate = false, follow }: CharacterProps) => {
   const groupRef = useRef<Group>(null);
+  const leftArmRef = useRef<Group>(null);
+  const rightArmRef = useRef<Group>(null);
   const texture = useAvatarTexture(avatarUrl);
   const height = seated ? 0.45 : 0.9;
   const headY = height + (seated ? 0.55 : 0.8);
   // The seated robe bottoms out at 0.19 m; the public bench seat is at 0.5 m.
   const baseY = onBench ? 0.31 : elevation;
 
-  useFrame(() => {
+  const appearanceOfMember = wig ? undefined : appearanceOf(id);
+  const pack = gesturePacks[(wig ? 0 : appearanceOfMember?.style ?? 0) % gesturePacks.length] ?? [];
+  // Seated members rest their hands forward, standing ones let their arms hang:
+  const restX = seated ? -0.9 : 0;
+
+  useFrame((state) => {
     const current = groupRef.current;
     if (current === null) return;
     const target = follow?.current ?? position;
@@ -138,6 +172,17 @@ export const Character = ({ id, name, avatarUrl, position, rotation, seated, onB
     current.position.x += (target.x - current.position.x) * factor;
     current.position.z += (target.z - current.position.z) * factor;
     current.rotation.y = rotation;
+
+    const time = state.clock.elapsedTime;
+    const gesture = speaking ? pack[Math.floor(time / GESTURE_SECONDS + id.length) % pack.length] : undefined;
+    for (const [index, arm] of [leftArmRef.current, rightArmRef.current].entries()) {
+      if (arm === null) continue;
+      const side = index === 0 ? -1 : 1;
+      const pose = gesture === undefined ? { ...IDLE, x: restX } : (index === 0 ? gesture.left : gesture.right);
+      const wobble = pose.wobble ?? 0;
+      arm.rotation.x += (pose.x + Math.sin(time * 5 + index) * wobble - arm.rotation.x) * 0.15;
+      arm.rotation.z += (side * (pose.outward + Math.cos(time * 4 + index) * wobble * 0.5) - arm.rotation.z) * 0.15;
+    }
   });
 
   const appearance = wig ? { skin: "#ffd1a1", nose: "#f5b485", robe: "#272030", shoulders: "#35263d", hair: "#fff9ee", accent: "#8e5bff", style: 0 } : appearanceOf(id);
@@ -184,13 +229,13 @@ export const Character = ({ id, name, avatarUrl, position, rotation, seated, onB
         {outline}
       </mesh>
       {[-1, 1].map((side) => (
-        <group key={side}>
-          <mesh position={[side * 0.3, height + 0.04, 0]} rotation-z={-side * 0.12} castShadow>
+        <group key={side} ref={side === -1 ? leftArmRef : rightArmRef} position={[side * 0.3, height + (seated ? 0.22 : 0.3), 0]} rotation={[restX, 0, side * 0.07]}>
+          <mesh position={[0, seated ? -0.18 : -0.3, 0]} castShadow>
             <cylinderGeometry onUpdate={facetGeometry} args={[0.14, 0.11, seated ? 0.36 : 0.6, 6]} />
             <meshToonMaterial color={appearance.robe} />
             {outline}
           </mesh>
-          <mesh position={[side * 0.34, height + (seated ? 0.14 : -0.3), seated ? 0.23 : 0.02]} castShadow>
+          <mesh position={[0, seated ? -0.38 : -0.62, 0]} castShadow>
             <icosahedronGeometry onUpdate={facetGeometry} args={[0.08, 1]} />
             <meshToonMaterial color={skin} />
             {outline}

@@ -31,13 +31,14 @@ type PlayerControllerProps = {
   self: PlayerState;
   trial: TrialView | null;
   speech: string | null;
+  speaking: boolean;
   send: (message: ClientMessage) => void;
   occupiedSeats: ReadonlySet<string | null>;
   onInteraction: (interaction: NearbyInteraction) => void;
 };
 
 /** The local player: keyboard movement with prediction, third-person camera and the E interaction */
-export const PlayerController = ({ self, trial, speech, send, occupiedSeats, onInteraction }: PlayerControllerProps) => {
+export const PlayerController = ({ self, trial, speech, speaking, send, occupiedSeats, onInteraction }: PlayerControllerProps) => {
   const camera = useThree((state) => state.camera);
   const canvas = useThree((state) => state.gl.domElement);
   const pressedRef = useRef(new Set<string>());
@@ -149,6 +150,7 @@ export const PlayerController = ({ self, trial, speech, send, occupiedSeats, onI
       seated={self.seatId !== null}
       onBench={isBenchSeat(self.seatId)}
       speech={speech}
+      speaking={speaking}
     />
   );
 };
