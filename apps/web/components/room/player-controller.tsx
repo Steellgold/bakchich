@@ -47,7 +47,8 @@ export const PlayerController = ({ self, speech, send, onNearGate }: PlayerContr
   useEffect(() => {
     const down = (event: KeyboardEvent) => {
       pressedRef.current.add(event.code);
-      if (event.code !== "KeyE") return;
+      // A held key repeats: E must act once per press.
+      if (event.code !== "KeyE" || event.repeat) return;
       if (self.seatId !== null) send({ type: "stand-up" });
       else if (nearGateRef.current && self.role === null) send({ type: "become-juror" });
     };
@@ -57,14 +58,20 @@ export const PlayerController = ({ self, speech, send, onNearGate }: PlayerContr
     const drag = (event: PointerEvent) => {
       if (event.buttons === 1) yawRef.current -= event.movementX * 0.005;
     };
+    // Keys released while the window is in the background never fire keyup:
+    const release = () => {
+      pressedRef.current.clear();
+    };
 
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
     window.addEventListener("pointermove", drag);
+    window.addEventListener("blur", release);
     return () => {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
       window.removeEventListener("pointermove", drag);
+      window.removeEventListener("blur", release);
     };
   }, [self.seatId, self.role, send]);
 

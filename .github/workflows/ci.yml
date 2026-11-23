@@ -34,7 +34,8 @@ jobs:
           node-version: lts/*
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm run ts:check  test:
+      - run: pnpm run ts:check
+  test:
     name: Tests
     runs-on: ubuntu-latest
     steps:

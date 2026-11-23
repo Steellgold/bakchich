@@ -14,6 +14,7 @@ import { authorizeConnection } from "#/room/access";
 import { SEATS, TICK_MS } from "#/room/layout";
 import { parseClientMessage } from "#/room/protocol";
 import { pickDisplayedTrial, World } from "#/room/world";
+import { attempt } from "#/utils/attempt";
 import { env } from "#/utils/env";
 import { logger } from "#/utils/logger";
 import { trigger } from "#/utils/trigger";
@@ -26,6 +27,9 @@ const AUTH_TIMEOUT_MS = 5_000;
 const MAX_MOVE_ELAPSED_MS = 200;
 const KNOWN_MEMBERS_REFRESH_MS = 60_000;
 const KNOWN_MEMBERS_LIMIT = 100;
+/** Client messages are tiny JSON intents */
+const MAX_PAYLOAD_BYTES = 4 * 1024;
+const ROOM_UNAVAILABLE = "Salle indisponible, réessaie plus tard.";
 
 const world = new World();
 const sockets = new Map<string, WebSocket>();
@@ -49,7 +53,8 @@ const rawText = (raw: RawData): string => {
 
 const checkMember = async (discordId: string) => {
   const guild = await discordClient.guilds.fetch(ROYAUME_GUILD_ID);
-  const member = await findDiscordGuildMember(guild, discordId);
+  // Forced fetch: without the GuildMembers intent the cache never learns about kicks or role changes.
+  const member = await findDiscordGuildMember(guild, discordId, { force: true });
   if (member === null) return null;
 
   const category = await guild.channels.fetch(AGENTS_CATEGORY_ID);
@@ -124,25 +129,44 @@ const handleMessage = (member: RoomMember, socket: WebSocket, raw: string) => {
   }
 };
 
-const onConnection = async (socket: WebSocket, request: IncomingMessage) => {
+const reject = (socket: WebSocket, reason: string) => {
+  send(socket, { type: "rejected", reason });
+  socket.close();
+};
+
+const authorize = async (socket: WebSocket, request: IncomingMessage) => {
   const cookie = request.headers.cookie ?? await waitForTokenCookie(socket);
-  const access = await authorizeConnection({
+  return authorizeConnection({
     getSession: async () => (cookie === null ? null : fetchSession(cookie)),
     checkMember,
   });
+};
+
+const onConnection = async (socket: WebSocket, request: IncomingMessage) => {
+  // Protocol errors (malformed frames, oversized messages) must close this socket only, never crash the process:
+  socket.on("error", (error) => {
+    logger.warn(`Room socket error: ${error.message}`);
+    socket.terminate();
+  });
+
+  const access = await attempt(async () => authorize(socket, request));
+
+  // The browser may have left while it was being authorized:
+  if (socket.readyState !== WebSocket.OPEN) return;
 
   if (!access.ok) {
-    send(socket, { type: "rejected", reason: access.reason });
-    socket.close();
+    logger.error("Room authorization failed:", access.error instanceof Error ? access.error.stack : String(access.error));
+    reject(socket, ROOM_UNAVAILABLE);
+    return;
+  }
+  if (!access.value.ok) {
+    reject(socket, access.value.reason);
     return;
   }
 
-  const { member } = access;
+  const { member } = access.value;
   const previous = sockets.get(member.id);
-  if (previous !== undefined) {
-    send(previous, { type: "rejected", reason: "Connecté ailleurs." });
-    previous.close();
-  }
+  if (previous !== undefined) reject(previous, "Connecté ailleurs.");
 
   world.join(member);
   sockets.set(member.id, socket);
@@ -185,7 +209,7 @@ trigger.safeListener("Room known members refresh", refreshKnownMembers)();
 const server = createServer((_request, response) => {
   response.writeHead(404).end();
 });
-const webSocketServer = new WebSocketServer({ server, path: "/ws" });
+const webSocketServer = new WebSocketServer({ server, path: "/ws", maxPayload: MAX_PAYLOAD_BYTES });
 webSocketServer.on("connection", trigger.safeListener("Room connection", onConnection));
 server.listen(env.ROOM_PORT, () => {
   logger.info(`Room WebSocket server listening on port ${String(env.ROOM_PORT)}`);

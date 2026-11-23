@@ -23,10 +23,20 @@ export const useRoomSocket = (url: string) => {
     const socket = new WebSocket(url);
     socketRef.current = socket;
 
+    // The verdict and vote result belong to one trial: cleared when a new trial is displayed.
+    let lastTrialId: string | null = null;
+
     const onMessage = (event: MessageEvent<string>) => {
       const message = JSON.parse(event.data) as ServerMessage;
       if (message.type === "welcome") setSelfId(message.selfId);
-      if (message.type === "snapshot") setSnapshot(message);
+      if (message.type === "snapshot") {
+        setSnapshot(message);
+        if (message.trial !== null && message.trial.id !== lastTrialId) {
+          lastTrialId = message.trial.id;
+          setVerdict(null);
+          setVoteResult(null);
+        }
+      }
       if (message.type === "speech") setSpeeches((current) => [...current, { speakerId: message.speakerId, text: message.text, at: Date.now() }]);
       if (message.type === "verdict") setVerdict(message.line);
       if (message.type === "vote-result") setVoteResult(message.result);

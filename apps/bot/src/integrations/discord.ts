@@ -44,9 +44,9 @@ export const getCategoryId = (channel: Channel): string | null => {
 };
 
 /** Guild member, or null when the user is not (or no longer) in the guild */
-export const findDiscordGuildMember = async (guild: Guild, userId: string): Promise<GuildMember | null> => {
+export const findDiscordGuildMember = async (guild: Guild, userId: string, options: { force?: boolean } = {}): Promise<GuildMember | null> => {
   try {
-    return await guild.members.fetch(userId);
+    return await guild.members.fetch({ user: userId, force: options.force === true });
   }
   catch (error) {
     if (error instanceof DiscordAPIError && (error.code === RESTJSONErrorCodes.UnknownMember || error.code === RESTJSONErrorCodes.UnknownUser)) return null;
