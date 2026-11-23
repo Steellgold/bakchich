@@ -5,7 +5,7 @@ import type { ClientMessage } from "@tribunal/bot/room/protocol";
 import type { PlayerState } from "@tribunal/bot/room/world";
 import { Character } from "./character";
 import { useFrame, useThree } from "@react-three/fiber";
-import { GATE, GATE_RADIUS, MAX_SPEED, TICK_MS } from "@tribunal/bot/room/layout";
+import { GATE, GATE_RADIUS, MAX_SPEED, ROOM, TICK_MS } from "@tribunal/bot/room/layout";
 import { canStand } from "@tribunal/bot/room/world";
 import { useEffect, useRef } from "react";
 
@@ -13,6 +13,8 @@ import { useEffect, useRef } from "react";
 const SNAP_DISTANCE = 1;
 const CAMERA_DISTANCE = 6;
 const CAMERA_HEIGHT = 3.5;
+const CAMERA_MARGIN = 0.4;
+const CAMERA_LIMIT_X = ROOM.width / 2 - CAMERA_MARGIN;
 
 // ZQSD (AZERTY) and WASD (QWERTY) both move:
 const KEYS = {
@@ -103,10 +105,11 @@ export const PlayerController = ({ self, speech, send, onNearGate }: PlayerContr
       onNearGate(isNearGate);
     }
 
+    // Clamped inside the walls, otherwise the camera ends up behind one and only sees its outer face:
     camera.position.set(
-      predictedRef.current.x + Math.sin(yawRef.current) * CAMERA_DISTANCE,
+      Math.max(-CAMERA_LIMIT_X, Math.min(CAMERA_LIMIT_X, predictedRef.current.x + Math.sin(yawRef.current) * CAMERA_DISTANCE)),
       CAMERA_HEIGHT,
-      predictedRef.current.z + Math.cos(yawRef.current) * CAMERA_DISTANCE,
+      Math.max(CAMERA_MARGIN, Math.min(ROOM.depth - CAMERA_MARGIN, predictedRef.current.z + Math.cos(yawRef.current) * CAMERA_DISTANCE)),
     );
     camera.lookAt(predictedRef.current.x, 1.2, predictedRef.current.z);
   });
