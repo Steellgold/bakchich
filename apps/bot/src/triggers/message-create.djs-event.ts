@@ -3,6 +3,7 @@ import type { Message } from "discord.js";
 import { parseCommand } from "#/court/command";
 import { court, judge } from "#/court/court";
 import { pickLawyer } from "#/court/engine";
+import { upsertMember } from "#/court/members";
 import { fetchRecord } from "#/court/record";
 import { AGENTS_CATEGORY_ID, discordClient, fetchRecentHumanMessages, findDiscordGuildMember, getCategoryId, sanitizeDiscordMessage, startDiscordTyping } from "#/integrations/discord";
 import { logger } from "#/utils/logger";
@@ -48,7 +49,13 @@ const openTrial = async (message: Message<true>, accusedId: string, crime: strin
   const lawyer = pickLawyer(candidates, [accused.id, plaintiff.id, botId], Math.random);
 
   const trial = court.open({ channelId: message.channelId, accused: { id: accused.id, name: accused.displayName }, plaintiff, lawyer, crime });
-  if (trial === "busy") await reply(message, "La cour est occupée, revenez plus tard.");
+  if (trial === "busy") {
+    await reply(message, "La cour est occupée, revenez plus tard.");
+    return;
+  }
+
+  await upsertMember({ id: accused.id, name: accused.displayName, avatarUrl: accused.displayAvatarURL({ extension: "png", size: 128 }) });
+  if (lawyer !== null) await upsertMember({ ...lawyer, avatarUrl: null });
 };
 
 const showRecord = async (message: Message<true>, targetId: string) => {
@@ -71,18 +78,24 @@ trigger.discordEvent("messageCreate", async (message) => {
     return;
   }
 
+  // Every human line of a trial channel is relayed to the courtroom:
+  court.say(message.channelId, message.author.id, message.content);
+
   // Plain messages are pleas during a debate, and the judge intervenes from time to time:
   if (!mentioned) {
     const trial = court.get(message.channelId);
     if (trial === undefined || !court.plea(message.channelId)) return;
 
     const recent = await fetchRecentHumanMessages(message.channel, CONTEXT_MESSAGES);
-    await message.channel.send({ content: sanitizeDiscordMessage(await judge.intervene(trial, recent.lines)), allowedMentions: { parse: [] } });
+    const intervention = await judge.intervene(trial, recent.lines);
+    await message.channel.send({ content: sanitizeDiscordMessage(intervention), allowedMentions: { parse: [] } });
+    court.say(message.channelId, null, intervention);
     return;
   }
 
   const command = parseCommand(message.content, botUser.id);
   logger.info(`Command from ${message.author.username} in ${message.channelId}: ${command?.kind ?? "chat"}`);
+  await upsertMember({ id: message.author.id, name: authorName(message), avatarUrl: message.author.displayAvatarURL({ extension: "png", size: 128 }) });
 
   if (command?.kind === "trial") {
     const stopTyping = startDiscordTyping(message.channel, () => logger.warn("Could not send the typing indicator"));

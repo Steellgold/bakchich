@@ -25,7 +25,7 @@ const voteButtons = (trialId: string, disabled: boolean) => [
 ];
 
 const handleEvent = async (event: CourtEvent) => {
-  if (event.type === "vote-cast") return;
+  if (event.type === "vote-cast" || event.type === "speech") return;
 
   const { trial } = event;
   const channel = await fetchDiscordSendableChannel(trial.channelId);
@@ -34,6 +34,7 @@ const handleEvent = async (event: CourtEvent) => {
     const stopTyping = startDiscordTyping(channel, () => logger.warn("Could not send the typing indicator"));
     const text = await judge.opening(trial).finally(stopTyping);
     await sendSafeMessage(channel, text, involvedIds(trial));
+    court.say(trial.channelId, null, text);
     return;
   }
 

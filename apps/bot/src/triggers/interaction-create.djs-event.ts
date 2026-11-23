@@ -1,5 +1,6 @@
 import type { VoteResult } from "#/court/engine";
 import { court } from "#/court/court";
+import { upsertMember } from "#/court/members";
 import { trigger } from "#/utils/trigger";
 import { MessageFlags } from "discord.js";
 
@@ -25,5 +26,7 @@ trigger.discordEvent("interactionCreate", async (interaction) => {
     "no-trial": TRIAL_OVER,
   };
 
+  // Reply first: Discord only waits 3 seconds for an interaction answer.
   await interaction.reply({ content: answers[court.vote(channelId, interaction.user.id, guilty)], flags: MessageFlags.Ephemeral });
+  await upsertMember({ id: interaction.user.id, name: interaction.user.displayName, avatarUrl: interaction.user.displayAvatarURL({ extension: "png", size: 128 }) });
 });

@@ -30,7 +30,9 @@ export type CourtEvent
   = | { type: "opened"; trial: Trial }
     | { type: "vote-started"; trial: Trial }
     | { type: "vote-cast"; trial: Trial }
-    | { type: "verdict"; trial: Trial; verdict: Verdict };
+    | { type: "verdict"; trial: Trial; verdict: Verdict }
+    /** Someone spoke in the trial channel, speakerId null being the judge */
+    | { type: "speech"; trial: Trial; speakerId: string | null; text: string };
 
 export type VoteResult = "ok" | "not-allowed" | "closed" | "no-trial";
 
@@ -72,6 +74,17 @@ export class Court extends EventEmitter<{ event: [CourtEvent] }> {
 
   public get(channelId: string): Trial | undefined {
     return this.states.get(channelId)?.trial;
+  }
+
+  /** Every trial in progress */
+  public list(): Trial[] {
+    return [...this.states.values()].map((state) => state.trial);
+  }
+
+  /** Relay a line spoken in a trial channel (null speaker = the judge), ignored without trial */
+  public say(channelId: string, speakerId: string | null, text: string): void {
+    const trial = this.get(channelId);
+    if (trial !== undefined) this.emit("event", { type: "speech", trial, speakerId, text });
   }
 
   public open(input: { channelId: string; accused: Member; plaintiff: Member; lawyer: Member | null; crime: string }): Trial | "busy" {

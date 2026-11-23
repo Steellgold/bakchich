@@ -155,4 +155,33 @@ describe("Court", () => {
     mock.timers.tick(DEBATE_MS);
     assert.equal(court.plea("c1"), false);
   });
+
+  it("emits speech during debate and vote, nothing without trial", () => {
+    const court = new Court(scriptedRng(0.9));
+    const events = collect(court);
+
+    court.say("c1", "9", "ignored");
+    assert.equal(events.length, 0);
+
+    court.open(openInput());
+    court.say("c1", "9", "il est coupable");
+    assert.deepEqual(events.at(-1), { type: "speech", trial: court.get("c1"), speakerId: "9", text: "il est coupable" });
+
+    mock.timers.tick(DEBATE_MS);
+    court.say("c1", null, "Silence !");
+    const last = events.at(-1);
+    assert.equal(last?.type, "speech");
+    assert.equal(last.speakerId, null);
+  });
+
+  it("lists open trials and drops them after the verdict", () => {
+    const court = new Court(scriptedRng(0.9));
+    court.open(openInput("c1"));
+    court.open(openInput("c2"));
+    assert.deepEqual(court.list().map((trial) => trial.channelId), ["c1", "c2"]);
+
+    mock.timers.tick(DEBATE_MS);
+    mock.timers.tick(VOTE_MS);
+    assert.deepEqual(court.list(), []);
+  });
 });
