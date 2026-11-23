@@ -38,6 +38,7 @@ type PlayerControllerProps = {
 /** The local player: keyboard movement with prediction, third-person camera and the E interaction */
 export const PlayerController = ({ self, speech, send, occupiedSeats, onInteraction }: PlayerControllerProps) => {
   const camera = useThree((state) => state.camera);
+  const canvas = useThree((state) => state.gl.domElement);
   const pressedRef = useRef(new Set<string>());
   const predictedRef = useRef<Vec2>({ ...self.position });
   const facingRef = useRef(self.rotation);
@@ -67,8 +68,12 @@ export const PlayerController = ({ self, speech, send, occupiedSeats, onInteract
     const up = (event: KeyboardEvent) => {
       pressedRef.current.delete(event.code);
     };
-    const drag = (event: PointerEvent) => {
-      if (event.buttons === 1) yawRef.current -= event.movementX * 0.005;
+    // The mouse looks around once the cursor is captured by a click on the scene (Escape releases it); dragging still works without it.
+    const look = (event: PointerEvent) => {
+      if (document.pointerLockElement === canvas || event.buttons === 1) yawRef.current -= event.movementX * 0.005;
+    };
+    const capture = () => {
+      void canvas.requestPointerLock();
     };
     // Keys released while the window is in the background never fire keyup:
     const release = () => {
@@ -77,15 +82,17 @@ export const PlayerController = ({ self, speech, send, occupiedSeats, onInteract
 
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
-    window.addEventListener("pointermove", drag);
+    window.addEventListener("pointermove", look);
     window.addEventListener("blur", release);
+    canvas.addEventListener("click", capture);
     return () => {
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
-      window.removeEventListener("pointermove", drag);
+      window.removeEventListener("pointermove", look);
       window.removeEventListener("blur", release);
+      canvas.removeEventListener("click", capture);
     };
-  }, [self.seatId, send]);
+  }, [self.seatId, send, canvas]);
 
   useFrame((_state, delta) => {
     const isDown = (codes: string[]) => codes.some((code) => pressedRef.current.has(code));
