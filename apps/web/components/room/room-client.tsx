@@ -118,7 +118,7 @@ export const RoomClient = ({ url, token }: { url: string; token?: string }) => {
         {self !== undefined && <PlayerController self={self} trial={snapshot?.trial ?? null} speech={latestSpeech(speeches, self.id)} speaking={speaking.has(self.id)} send={send} occupiedSeats={occupiedSeats} onInteraction={setInteraction} />}
       </Canvas>
 
-      <Hud trial={snapshot?.trial ?? null} verdict={verdict} voteResult={voteResult} interaction={interaction} seated={(self?.seatId ?? null) !== null} send={send} />
+      <Hud trial={snapshot?.trial ?? null} verdict={verdict} voteResult={voteResult} interaction={interaction} role={self?.role ?? null} seatId={self?.seatId ?? null} send={send} />
     </div>
   );
 };
