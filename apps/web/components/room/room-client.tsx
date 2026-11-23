@@ -33,12 +33,12 @@ export const RoomClient = ({ url }: { url: string }) => {
   return (
     <div className="room">
       <Canvas shadows camera={{ fov: 60, position: [0, 4, 34] }}>
-        <color attach="background" args={["#14110d"]} />
-        <ambientLight intensity={0.6} />
-        <directionalLight position={[6, 14, 10]} intensity={1.2} castShadow />
+        <color attach="background" args={["#9ad9ff"]} />
+        <ambientLight intensity={1.4} />
+        <directionalLight position={[6, 14, 10]} intensity={2.2} castShadow />
         <Courtroom />
 
-        <Character name="Le Juge" avatarUrl={null} position={SEATS.judge.position} rotation={SEATS.judge.rotation} seated speech={latestSpeech(speeches, null)} color="#5d4037" />
+        <Character name="Le Juge" avatarUrl={null} position={SEATS.judge.position} rotation={SEATS.judge.rotation} seated speech={latestSpeech(speeches, null)} color="#8e5bff" wig />
 
         {snapshot?.npcs.map((npc) => {
           const seat = seatById.get(npc.seatId);
@@ -54,7 +54,6 @@ export const RoomClient = ({ url }: { url: string }) => {
             rotation={player.rotation}
             seated={player.seatId !== null}
             speech={latestSpeech(speeches, player.id)}
-            color="#16a085"
             interpolate
           />
         ))}

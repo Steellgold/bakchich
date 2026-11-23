@@ -123,7 +123,6 @@ export const PlayerController = ({ self, speech, send, onNearGate }: PlayerContr
       rotation={self.seatId === null ? facingRef.current : self.rotation}
       seated={self.seatId !== null}
       speech={speech}
-      color="#2c3e50"
     />
   );
 };

@@ -87,8 +87,9 @@ trigger.discordEvent("messageCreate", async (message) => {
     const trial = court.get(message.channelId);
     if (trial === undefined || !court.plea(message.channelId)) return;
 
+    const stopTyping = startDiscordTyping(message.channel, () => logger.warn("Could not send the typing indicator"));
     const recent = await fetchRecentHumanMessages(message.channel, CONTEXT_MESSAGES);
-    const intervention = await judge.intervene(trial, recent.lines);
+    const intervention = await judge.intervene(trial, recent.lines).finally(stopTyping);
     await message.channel.send({ content: sanitizeDiscordMessage(`${EMOJI.judge} ${intervention}`), allowedMentions: { parse: [] } });
     court.say(message.channelId, null, intervention);
     return;
@@ -104,7 +105,8 @@ trigger.discordEvent("messageCreate", async (message) => {
     return;
   }
   if (command?.kind === "record") {
-    await showRecord(message, command.targetId);
+    const stopTyping = startDiscordTyping(message.channel, () => logger.warn("Could not send the typing indicator"));
+    await showRecord(message, command.targetId).finally(stopTyping);
     return;
   }
   if (command?.kind === "invalid-crime") {
@@ -112,5 +114,7 @@ trigger.discordEvent("messageCreate", async (message) => {
     return;
   }
 
-  await reply(message, await judge.chat(authorName(message), message.content.replaceAll(`<@${botUser.id}>`, "").trim()));
+  const stopTyping = startDiscordTyping(message.channel, () => logger.warn("Could not send the typing indicator"));
+  const answer = await judge.chat(authorName(message), message.content.replaceAll(`<@${botUser.id}>`, "").trim()).finally(stopTyping);
+  await reply(message, answer);
 });

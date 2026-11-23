@@ -54,7 +54,9 @@ const handleEvent = async (event: CourtEvent) => {
   }
 
   // The record is the durable outcome: saved before any Discord call that could fail.
-  const sentence = event.verdict.guilty ? await judge.sentence(trial) : null;
+  const stopSentenceTyping = startDiscordTyping(channel, () => logger.warn("Could not send the typing indicator"));
+  const sentence = event.verdict.guilty ? await judge.sentence(trial).finally(stopSentenceTyping) : null;
+  stopSentenceTyping();
   await saveTrial(trial, event.verdict, sentence);
 
   // The vote message may have been deleted meanwhile: disabling its buttons is best effort.
