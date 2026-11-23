@@ -15,6 +15,7 @@ const trialFor = (id: string, accusedId: string, startedAt: number): Trial => ({
   phase: "debate",
   votes: new Map(),
   startedAt: new Date(startedAt),
+  phaseEndsAt: startedAt,
 });
 
 const join = (world: World, id: string) => world.join({ id, name: id, avatarUrl: null });

@@ -174,6 +174,17 @@ describe("Court", () => {
     assert.equal(last.speakerId, null);
   });
 
+  it("exposes the deadline of the current phase", () => {
+    mock.timers.reset();
+    mock.timers.enable({ apis: ["setTimeout", "Date"], now: 1_000 });
+    const court = new Court(scriptedRng(0.9));
+    court.open(openInput());
+    assert.equal(court.get("c1")?.phaseEndsAt, 1_000 + DEBATE_MS);
+
+    mock.timers.tick(DEBATE_MS);
+    assert.equal(court.get("c1")?.phaseEndsAt, 1_000 + DEBATE_MS + VOTE_MS);
+  });
+
   it("lists open trials and drops them after the verdict", () => {
     const court = new Court(scriptedRng(0.9));
     court.open(openInput("c1"));

@@ -20,6 +20,8 @@ export type Trial = {
   /** Voter ID to vote (true means guilty) */
   votes: Map<string, boolean>;
   startedAt: Date;
+  /** Epoch milliseconds when the current phase ends */
+  phaseEndsAt: number;
 };
 
 export type Verdict = { guilty: boolean; reversed: boolean; coinFlip: boolean; guiltyVotes: number; innocentVotes: number };
@@ -90,12 +92,13 @@ export class Court extends EventEmitter<{ event: [CourtEvent] }> {
   public open(input: { channelId: string; accused: Member; plaintiff: Member; lawyer: Member | null; crime: string }): Trial | "busy" {
     if (this.states.has(input.channelId)) return "busy";
 
-    const trial: Trial = { ...input, id: randomUUID(), phase: "debate", votes: new Map(), startedAt: new Date() };
+    const trial: Trial = { ...input, id: randomUUID(), phase: "debate", votes: new Map(), startedAt: new Date(), phaseEndsAt: Date.now() + DEBATE_MS };
     this.states.set(input.channelId, { trial, pleas: 0, pleaThreshold: this.drawPleaThreshold() });
     this.emit("event", { type: "opened", trial });
 
     setTimeout(() => {
       trial.phase = "vote";
+      trial.phaseEndsAt = Date.now() + VOTE_MS;
       this.emit("event", { type: "vote-started", trial });
 
       setTimeout(() => {

@@ -14,6 +14,7 @@ const trial: Trial = {
   phase: "debate",
   votes: new Map(),
   startedAt: new Date(),
+  phaseEndsAt: 0,
 };
 
 const verdict: Verdict = { guilty: true, reversed: false, coinFlip: false, guiltyVotes: 3, innocentVotes: 1 };
