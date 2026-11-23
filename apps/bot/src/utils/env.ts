@@ -13,6 +13,8 @@ const schema = z.object({
   OPENROUTER_API_KEY: z.string(),
   OPENROUTER_MODELS: z.string().default(""),
 
+  PIPER_URL: z.url().default("http://localhost:5000"),
+
   ROOM_PORT: z.coerce.number().int().default(3001),
   WEB_INTERNAL_URL: z.url().default("http://localhost:3000"),
 });

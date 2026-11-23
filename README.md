@@ -53,3 +53,7 @@ The website and the courtroom WebSocket share the same domain, so the login cook
 ## Credits
 
 Base structure from [Bluzzi/discord-agent](https://github.com/Bluzzi/discord-agent).
+
+## Judge voice
+
+The `tts` service of `docker-compose.yml` runs Piper (French voice `fr_FR-siwis-medium`, built into the image, no account or cost). The bot reaches it through `PIPER_URL` (`http://tts:5000` in Docker, `http://localhost:5000` by default). Locally: `pip install "piper-tts[http]" flask`, `python -m piper.download_voices fr_FR-siwis-medium`, then `python -m piper.http_server -m fr_FR-siwis-medium`.

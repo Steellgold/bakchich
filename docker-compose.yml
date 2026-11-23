@@ -25,10 +25,20 @@ services:
       DISCORD_AGENTS_CATEGORY_ID: ${DISCORD_AGENTS_CATEGORY_ID:-1574094410830844105}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?}
       OPENROUTER_MODELS: ${OPENROUTER_MODELS:-}
+      PIPER_URL: http://tts:5000
       ROOM_PORT: "3001"
       WEB_INTERNAL_URL: http://web:3000
     depends_on:
       - postgres
+
+  # Self-hosted voice of the judge (Piper), reached by the bot only:
+  tts:
+    build:
+      context: .
+      dockerfile: docker/piper.Dockerfile
+    restart: unless-stopped
+    expose:
+      - "5000"
 
   web:
     build:
