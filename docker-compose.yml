@@ -6,7 +6,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: tribunal
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_PASSWORD: ${SERVICE_PASSWORD_64_POSTGRES}
       POSTGRES_DB: tribunal
     volumes:
       - postgres-data:/var/lib/postgresql/data
@@ -17,7 +17,7 @@ services:
       dockerfile: apps/bot/Dockerfile
     restart: unless-stopped
     environment:
-      POSTGRESQL_URL: postgres://tribunal:${POSTGRES_PASSWORD:?}@postgres:5432/tribunal
+      POSTGRESQL_URL: postgres://tribunal:${SERVICE_PASSWORD_64_POSTGRES}@postgres:5432/tribunal
       DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:?}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?}
       OPENROUTER_MODELS: ${OPENROUTER_MODELS:-}
@@ -32,7 +32,7 @@ services:
       dockerfile: apps/web/Dockerfile
     restart: unless-stopped
     environment:
-      POSTGRESQL_URL: postgres://tribunal:${POSTGRES_PASSWORD:?}@postgres:5432/tribunal
+      POSTGRESQL_URL: postgres://tribunal:${SERVICE_PASSWORD_64_POSTGRES}@postgres:5432/tribunal
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?}
       BETTER_AUTH_URL: https://tribunal.gaetanhus.fr
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:?}
