@@ -34,6 +34,8 @@ const interpretInstructions = dedent`
   - open-trial: they want to put someone, or a group of people, on trial. Put the accusation, in French and in one short phrase, in "crime", or null when the message gives no reason.
   - show-record: they want to see the criminal record of someone.
   - start-now: they want the hearing waiting in this channel to open right now.
+  - call-witness: they call someone to the witness stand during a trial.
+  - dismiss-witness: they send the witness on the stand back.
   - chat: anything else.
   Answer with one single JSON object and nothing else, like {"intent":"open-trial","crime":"vol de croissant"} or {"intent":"chat","crime":null}.
 `;

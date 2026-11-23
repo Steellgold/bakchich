@@ -20,6 +20,9 @@ export const ROOM = { width: HALF_WIDTH * 2, depth: DEPTH, spawn: { x: 0, z: 28 
 
 export const RESTRICTED_ZONE = { min: { x: -HALF_WIDTH, z: 0 }, max: { x: HALF_WIDTH, z: RAIL_Z } };
 
+/** The open area in front of the judge between the counsel desks: only counsel may walk in it, and only while a witness is on the stand */
+export const WELL = { min: { x: -5, z: 3.5 }, max: { x: 4.5, z: 12.7 } };
+
 /** Interaction point of the rail gate, on the public side */
 export const GATE: Vec2 = { x: 0, z: RAIL_Z + 0.6 };
 

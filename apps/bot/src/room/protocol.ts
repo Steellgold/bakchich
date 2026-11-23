@@ -15,7 +15,7 @@ const clientMessageSchema = z.discriminatedUnion("type", [
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
 
-export type TrialView = { id: string; accused: Member[]; plaintiff: Member; lawyer: Member | null; crime: string; phase: Phase; endsAt: number };
+export type TrialView = { id: string; accused: Member[]; plaintiff: Member; lawyer: Member | null; witness: Member | null; crime: string; phase: Phase; endsAt: number };
 
 export type Npc = { id: string; name: string; avatarUrl: string | null; seatId: string };
 

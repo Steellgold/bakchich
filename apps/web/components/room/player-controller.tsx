@@ -1,13 +1,13 @@
 "use client";
 
 import type { Vec2 } from "@tribunal/bot/room/layout";
-import type { ClientMessage } from "@tribunal/bot/room/protocol";
+import type { ClientMessage, TrialView } from "@tribunal/bot/room/protocol";
 import type { PlayerState } from "@tribunal/bot/room/world";
 import { Character } from "./character";
 import { isBenchSeat } from "./seats";
 import { useFrame, useThree } from "@react-three/fiber";
 import { GATE, GATE_RADIUS, MAX_SPEED, ROOM, TICK_MS } from "@tribunal/bot/room/layout";
-import { canStand, nearbyBenchSeat } from "@tribunal/bot/room/world";
+import { accessFor, canStand, nearbyBenchSeat } from "@tribunal/bot/room/world";
 import { useEffect, useRef } from "react";
 
 /** Distance above which the local prediction snaps back to the server position */
@@ -29,6 +29,7 @@ export type NearbyInteraction = "become-juror" | "sit-on-bench" | null;
 
 type PlayerControllerProps = {
   self: PlayerState;
+  trial: TrialView | null;
   speech: string | null;
   send: (message: ClientMessage) => void;
   occupiedSeats: ReadonlySet<string | null>;
@@ -36,7 +37,7 @@ type PlayerControllerProps = {
 };
 
 /** The local player: keyboard movement with prediction, third-person camera and the E interaction */
-export const PlayerController = ({ self, speech, send, occupiedSeats, onInteraction }: PlayerControllerProps) => {
+export const PlayerController = ({ self, trial, speech, send, occupiedSeats, onInteraction }: PlayerControllerProps) => {
   const camera = useThree((state) => state.camera);
   const canvas = useThree((state) => state.gl.domElement);
   const pressedRef = useRef(new Set<string>());
@@ -106,7 +107,7 @@ export const PlayerController = ({ self, speech, send, occupiedSeats, onInteract
       const dx = (-Math.sin(yawRef.current) * forward + Math.cos(yawRef.current) * strafe) * step;
       const dz = (-Math.cos(yawRef.current) * forward - Math.sin(yawRef.current) * strafe) * step;
       const next = { x: predictedRef.current.x + dx, z: predictedRef.current.z + dz };
-      if (canStand(next, self.role !== null)) predictedRef.current = next;
+      if (canStand(next, accessFor(self.role, trial))) predictedRef.current = next;
       facingRef.current = Math.atan2(dx, dz);
     }
 

@@ -113,7 +113,7 @@ export const RoomClient = ({ url, token }: { url: string; token?: string }) => {
           <LeavingCharacter key={player.id} player={player} onDone={(id) => setLeaving((list) => list.filter((entry) => entry.id !== id))} />
         ))}
 
-        {self !== undefined && <PlayerController self={self} speech={latestSpeech(speeches, self.id)} send={send} occupiedSeats={occupiedSeats} onInteraction={setInteraction} />}
+        {self !== undefined && <PlayerController self={self} trial={snapshot?.trial ?? null} speech={latestSpeech(speeches, self.id)} send={send} occupiedSeats={occupiedSeats} onInteraction={setInteraction} />}
       </Canvas>
 
       <Hud trial={snapshot?.trial ?? null} verdict={verdict} voteResult={voteResult} interaction={interaction} seated={(self?.seatId ?? null) !== null} send={send} />

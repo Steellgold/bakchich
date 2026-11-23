@@ -92,6 +92,7 @@ const trialView = (trial: Trial): TrialView => ({
   accused: trial.accused,
   plaintiff: trial.plaintiff,
   lawyer: trial.lawyer,
+  witness: trial.witness,
   crime: trial.crime,
   phase: trial.phase,
   endsAt: trial.phaseEndsAt,
@@ -104,6 +105,7 @@ const npcs = (): Npc[] => {
     ...(displayed?.accused ?? []).map((member, index): [{ id: string; name: string }, string | undefined] => [member, SEATS.accused[index]?.id]),
     [displayed?.plaintiff, SEATS.prosecutor.id],
     [displayed?.lawyer, SEATS.defense.id],
+    [displayed?.witness, SEATS.witness.id],
   ];
 
   return convened.flatMap(([member, seatId]) => (member === null || member === undefined || seatId === undefined || sockets.has(member.id) ? [] : [{ ...member, avatarUrl: avatarOf(member.id), seatId }]));

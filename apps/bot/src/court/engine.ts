@@ -16,6 +16,8 @@ export type Trial = {
   accused: Member[];
   plaintiff: Member;
   lawyer: Member | null;
+  /** Member on the witness stand, called by the prosecution or the defense */
+  witness: Member | null;
   crime: string;
   phase: Phase;
   /** Voter ID to vote (true means guilty) */
@@ -94,12 +96,13 @@ export class Court extends EventEmitter<{ event: [CourtEvent] }> {
   public open(input: { channelId: string; accused: Member[]; plaintiff: Member; lawyer: Member | null; crime: string }): Trial | "busy" {
     if (this.states.has(input.channelId)) return "busy";
 
-    const trial: Trial = { ...input, id: randomUUID(), phase: "debate", votes: new Map(), startedAt: new Date(), phaseEndsAt: Date.now() + DEBATE_MS };
+    const trial: Trial = { ...input, id: randomUUID(), witness: null, phase: "debate", votes: new Map(), startedAt: new Date(), phaseEndsAt: Date.now() + DEBATE_MS };
     this.states.set(input.channelId, trial);
     this.emit("event", { type: "opened", trial });
 
     setTimeout(() => {
       trial.phase = "vote";
+      trial.witness = null;
       trial.phaseEndsAt = Date.now() + VOTE_MS;
       this.emit("event", { type: "vote-started", trial });
 
@@ -110,6 +113,21 @@ export class Court extends EventEmitter<{ event: [CourtEvent] }> {
     }, DEBATE_MS).unref();
 
     return trial;
+  }
+
+  /** Put a member on the witness stand during the debate, replacing the previous witness */
+  public callWitness(channelId: string, witness: Member): "ok" | "no-trial" | "closed" {
+    const trial = this.get(channelId);
+    if (trial === undefined) return "no-trial";
+    if (trial.phase !== "debate") return "closed";
+
+    trial.witness = witness;
+    return "ok";
+  }
+
+  public dismissWitness(channelId: string): void {
+    const trial = this.get(channelId);
+    if (trial !== undefined) trial.witness = null;
   }
 
   public vote(channelId: string, voterId: string, guilty: boolean): VoteResult {

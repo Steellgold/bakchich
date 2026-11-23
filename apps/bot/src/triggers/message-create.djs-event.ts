@@ -8,7 +8,7 @@ import { saveHearing } from "#/court/hearings";
 import { upsertMember } from "#/court/members";
 import { fetchRecord } from "#/court/record";
 import { AGENTS_CATEGORY_ID, conversation, createHearingRoom, discordClient, fetchRecentHumanMessages, findDiscordGuildMember, getCategoryId, sanitizeDiscordMessage, startDiscordTyping } from "#/integrations/discord";
-import { forceStartAnswers, forceStartHearing, hasPendingHearing, scheduleHearing } from "#/triggers/hearings";
+import { forceStartAnswers, forceStartHearing, hasPendingHearing, judgeSays, scheduleHearing } from "#/triggers/hearings";
 import { logger } from "#/utils/logger";
 import { trigger } from "#/utils/trigger";
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
@@ -117,6 +117,50 @@ const requestHearing = async (message: Message<true>, accusedIds: string[], crim
   await openHearing(message, accusedIds, crime, botId, context).finally(() => requesting.delete(message.channelId));
 };
 
+/** The prosecution and the defense call a member to the witness stand, or send the witness back */
+const handleWitness = async (message: Message<true>, kind: "call-witness" | "dismiss-witness", botId: string) => {
+  const trial = court.get(message.channelId);
+  if (trial === undefined) {
+    await reply(message, `${EMOJI.hourglass} Aucun procès n'est en cours dans ce salon.`);
+    return;
+  }
+
+  // The accused defend themselves when they have no lawyer:
+  const counselIds = [trial.plaintiff.id, ...(trial.lawyer === null ? trial.accused.map((member) => member.id) : [trial.lawyer.id])];
+  if (!counselIds.includes(message.author.id)) {
+    await reply(message, `${EMOJI.courthouse} Seuls l'accusation et la défense appellent les témoins.`);
+    return;
+  }
+
+  if (kind === "dismiss-witness") {
+    court.dismissWitness(message.channelId);
+    await reply(message, `${EMOJI.gavel} Le témoin quitte la barre.`);
+    return;
+  }
+
+  const [witnessId] = (await resolveAccused(message, botId)).ids;
+  const parties = [trial.plaintiff.id, ...trial.accused.map((member) => member.id), ...(trial.lawyer === null ? [] : [trial.lawyer.id])];
+  if (witnessId === undefined || parties.includes(witnessId)) {
+    await reply(message, `${EMOJI.documentSearch} Quel témoin ? Mentionne un membre qui n'est ni accusé, ni plaignant, ni avocat.`);
+    return;
+  }
+
+  const witness = await findDiscordGuildMember(message.guild, witnessId);
+  if (witness === null || witness.user.bot) {
+    await reply(message, `${EMOJI.documentSearch} Ce témoin est introuvable au Royaume.`);
+    return;
+  }
+
+  if (court.callWitness(message.channelId, { id: witness.id, name: witness.displayName }) === "closed") {
+    await reply(message, `${EMOJI.hourglass} Les débats sont clos, plus de témoin.`);
+    return;
+  }
+
+  const announcement = `${witness.displayName} est appelé à la barre.`;
+  await reply(message, `${EMOJI.gavel} ${announcement}`);
+  judgeSays(message.channelId, announcement);
+};
+
 const showRecord = async (message: Message<true>, targetId: string) => {
   const target = await findDiscordGuildMember(message.guild, targetId);
   const entries = await fetchRecord(targetId);
@@ -184,6 +228,10 @@ trigger.discordEvent("messageCreate", async (message) => {
   if (intent.kind === "start-now") {
     const result = forceStartHearing(message.channelId, message.author.id);
     if (result !== "started") await reply(message, forceStartAnswers[result]);
+    return;
+  }
+  if (intent.kind === "call-witness" || intent.kind === "dismiss-witness") {
+    await handleWitness(message, intent.kind, botUser.id);
     return;
   }
   if (intent.kind === "show-record") {

@@ -5,10 +5,12 @@ export type Intent
   = | { kind: "open-trial"; crime: string | null }
     | { kind: "show-record" }
     | { kind: "start-now" }
+    | { kind: "call-witness" }
+    | { kind: "dismiss-witness" }
     | { kind: "chat" };
 
 const schema = z.object({
-  intent: z.enum(["open-trial", "show-record", "start-now", "chat"]),
+  intent: z.enum(["open-trial", "show-record", "start-now", "call-witness", "dismiss-witness", "chat"]),
   crime: z.string().nullish(),
 });
 

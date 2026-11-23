@@ -1,8 +1,11 @@
 import type { Trial } from "../court/engine";
 import type { Seat, Vec2 } from "./layout";
-import { GATE, GATE_RADIUS, MAX_SPEED, OBSTACLES, PLAYER_RADIUS, RESTRICTED_ZONE, ROOM, SEATS } from "./layout";
+import { GATE, GATE_RADIUS, MAX_SPEED, OBSTACLES, PLAYER_RADIUS, RESTRICTED_ZONE, ROOM, SEATS, WELL } from "./layout";
 
-export type Role = "accused" | "prosecutor" | "defense";
+export type Role = "accused" | "prosecutor" | "defense" | "witness";
+
+/** Where a character may walk: the public side, the restricted zone but not the well, or everywhere */
+export type Access = "public" | "party" | "counsel";
 
 export type PlayerState = {
   id: string;
@@ -14,7 +17,7 @@ export type PlayerState = {
   role: Role | null;
 };
 
-const ROLE_SEATS: Record<"prosecutor" | "defense", Seat> = { prosecutor: SEATS.prosecutor, defense: SEATS.defense };
+const ROLE_SEATS: Record<"prosecutor" | "defense" | "witness", Seat> = { prosecutor: SEATS.prosecutor, defense: SEATS.defense, witness: SEATS.witness };
 const BENCH_REACH = 1.25;
 
 /** The closest bench seat within reach that no connected player is using. */
@@ -34,6 +37,8 @@ export const nearbyBenchSeat = (position: Vec2, occupiedSeats: ReadonlySet<strin
 const inRestrictedZone = (point: Vec2) => point.x >= RESTRICTED_ZONE.min.x && point.x <= RESTRICTED_ZONE.max.x
   && point.z >= RESTRICTED_ZONE.min.z && point.z <= RESTRICTED_ZONE.max.z;
 
+const inWell = (point: Vec2) => point.x >= WELL.min.x && point.x <= WELL.max.x && point.z >= WELL.min.z && point.z <= WELL.max.z;
+
 const insideRoom = (point: Vec2) => Math.abs(point.x) <= ROOM.width / 2 - PLAYER_RADIUS
   && point.z >= PLAYER_RADIUS && point.z <= ROOM.depth - PLAYER_RADIUS;
 
@@ -41,13 +46,23 @@ const collides = (point: Vec2) => OBSTACLES.some((box) => point.x > box.min.x - 
   && point.z > box.min.z - PLAYER_RADIUS && point.z < box.max.z + PLAYER_RADIUS);
 
 /** Whether a standing character may be at this point, shared with the client for its local prediction */
-export const canStand = (point: Vec2, hasRole: boolean): boolean => insideRoom(point) && !collides(point) && (hasRole || !inRestrictedZone(point));
+export const canStand = (point: Vec2, access: Access): boolean => insideRoom(point) && !collides(point)
+  && (access === "counsel" || (!inWell(point) && (access === "party" || !inRestrictedZone(point))));
+
+/** Counsel (the prosecutor, the defense lawyer, or the accused defending themselves) walks in the well only while a witness is on the stand */
+export const accessFor = (role: Role | null, trial: { lawyer: unknown; witness: unknown } | null): Access => {
+  if (role === null) return "public";
+
+  const isCounsel = role === "prosecutor" || role === "defense" || (role === "accused" && trial?.lawyer === null);
+  return isCounsel && trial?.witness !== null && trial?.witness !== undefined ? "counsel" : "party";
+};
 
 const roleOf = (trial: Trial | null, id: string): Role | null => {
   if (trial === null) return null;
   if (trial.accused.some((member) => member.id === id)) return "accused";
   if (trial.plaintiff.id === id) return "prosecutor";
   if (trial.lawyer?.id === id) return "defense";
+  if (trial.witness?.id === id) return "witness";
   return null;
 };
 
@@ -90,7 +105,7 @@ export class World {
     const scale = length > maxLength ? maxLength / length : 1;
     const next = { x: state.position.x + dx * scale, z: state.position.z + dz * scale };
 
-    if (canStand(next, state.role !== null)) state.position = next;
+    if (canStand(next, accessFor(state.role, this.trial))) state.position = next;
   }
 
   public becomeJuror(id: string): "seated" | "too-far" | "full" {
@@ -129,6 +144,7 @@ export class World {
   public setTrial(trial: Trial | null): void {
     if (trial?.id === this.trial?.id) {
       this.trial = trial;
+      this.refreshRoles();
       return;
     }
     this.trial = trial;
@@ -147,11 +163,34 @@ export class World {
     return [...this.states.values()];
   }
 
+  /** During a trial: seat the witness who was called, release the one dismissed, and bring counsel back to their seat when they may no longer walk in the well */
+  private refreshRoles(): void {
+    for (const state of this.states.values()) {
+      const role = roleOf(this.trial, state.id);
+      if (role !== state.role) {
+        if (state.role === "witness") {
+          state.role = null;
+          state.seatId = null;
+          state.position = { ...GATE };
+        }
+        if (role === "witness") this.assignRole(state);
+        continue;
+      }
+
+      const seat = role === null ? undefined : this.seatFor(role, state.id);
+      if (seat !== undefined && state.seatId === null && accessFor(role, this.trial) !== "counsel" && inWell(state.position)) this.sit(state, seat);
+    }
+  }
+
+  private seatFor(role: Role, id: string): Seat | undefined {
+    return role === "accused" ? SEATS.accused[this.trial?.accused.findIndex((member) => member.id === id) ?? -1] : ROLE_SEATS[role];
+  }
+
   private assignRole(state: PlayerState): void {
     const role = roleOf(this.trial, state.id);
     if (role === null) return;
 
-    const seat = role === "accused" ? SEATS.accused[this.trial?.accused.findIndex((member) => member.id === state.id) ?? -1] : ROLE_SEATS[role];
+    const seat = this.seatFor(role, state.id);
     if (seat === undefined) return;
 
     state.role = role;
