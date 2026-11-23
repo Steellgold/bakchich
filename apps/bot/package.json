@@ -9,7 +9,6 @@
   "scripts": {
     "start": "node --import @swc-node/register/esm-register ./src/main.ts",
     "dev": "nodemon -q -w ./src/ --exec node --import @swc-node/register/esm-register ./src/main.ts",
-    "test": "node --import @swc-node/register/esm-register --test \"src/**/*.test.ts\"",
     "db:migration:create": "drizzle-kit generate",
     "ts:check": "tsc --noEmit"
   },

@@ -34,7 +34,7 @@ pnpm --filter @tribunal/web run dev
 
 Then open `http://localhost:3000`.
 
-Checks: `pnpm run ts:check`, `pnpm run lint:fix`, `pnpm run test`.
+Checks: `pnpm run ts:check`, `pnpm run lint:fix`.
 
 ## Deploy on the VPS
 

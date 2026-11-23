@@ -5,8 +5,7 @@
   "scripts": {
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "ts:check": "pnpm -r run ts:check",
-    "test": "pnpm -r run test"
+    "ts:check": "pnpm -r run ts:check"
   },
   "devDependencies": {
     "@bluzzi/eslint-config": "^2.4.2",

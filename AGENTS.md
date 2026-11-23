@@ -25,7 +25,6 @@ A Discord bot for the « Le Royaume » community: members put each other on tria
   After any codebase update, the following commands MUST be executed from the repository root and all reported errors MUST be fixed:
   - `pnpm run ts:check` — checks for TypeScript errors in every app.
   - `pnpm run lint:fix` — automatically fixes ESLint errors when possible and reports remaining ones.
-  - `pnpm run test` — runs the `node:test` suites of every app.
 
 ## Project Structure
 

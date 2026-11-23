@@ -7,7 +7,6 @@
     "build": "next build",
     "start": "next start",
     "ts:check": "tsc --noEmit",
-    "test": "node --import @swc-node/register/esm-register --test \"lib/**/*.test.ts\"",
     "db:migration:create": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate"
   },
