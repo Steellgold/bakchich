@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { Lilita_One } from "next/font/google";
+import { Lilita_One, Nunito } from "next/font/google";
 import "./globals.css";
 
-const display = Lilita_One({ weight: "400", subsets: ["latin"], variable: "--font-display" });
+const heading = Lilita_One({ weight: "400", subsets: ["latin"], variable: "--font-lilita" });
+const body = Nunito({ subsets: ["latin"], variable: "--font-nunito" });
 
 export const metadata: Metadata = {
   title: "Tribunal du Royaume",
@@ -11,7 +12,7 @@ export const metadata: Metadata = {
 };
 
 const RootLayout = ({ children }: { children: ReactNode }) => (
-  <html lang="fr" className={display.variable}>
+  <html lang="fr" className={`${heading.variable} ${body.variable}`}>
     <body>{children}</body>
   </html>
 );

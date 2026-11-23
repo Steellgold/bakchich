@@ -1,12 +1,71 @@
+/* ==========================================================================
+   Tribunal game UI: purple and gold low-poly plates, drawn in CSS.
+   Every panel, dialog, badge and button is a "plate": a chamfered gold frame
+   (::before) around a faceted face (::after). Variants only change variables.
+   ========================================================================== */
+
 :root {
-  --ink: #2b1b3d;
-  --paper: #fff4d6;
-  --red: #ff4f5e;
-  --green: #3ddc84;
-  --yellow: #ffd23f;
-  --blue: #3ea6ff;
-  --purple: #8e5bff;
-  --font: var(--font-display), "Comic Sans MS", system-ui, sans-serif;
+  /* Palette sampled from the reference sheets */
+  --purple-950: #1c0832;
+  --purple-900: #2a0e4a;
+  --purple-800: #3c1366;
+  --purple-700: #4f1a80;
+  --purple-600: #64259c;
+  --purple-500: #7d36bf;
+  --purple-400: #9b55e0;
+  --gold-700: #8c5210;
+  --gold-600: #b8771a;
+  --gold-500: #dc9e28;
+  --gold-400: #f2bd3c;
+  --gold-300: #ffd96a;
+  --gold-200: #fff0b8;
+  --cream-100: #fdf3e1;
+  --cream-200: #f3dfc0;
+  --cream-300: #e4c9a0;
+  --green-700: #255f14;
+  --green-600: #33801d;
+  --green-500: #45a02a;
+  --green-400: #66c043;
+  --red-700: #7e1820;
+  --red-600: #a8232a;
+  --red-500: #cf3934;
+  --red-400: #ec5a4f;
+  --text: var(--cream-100);
+  --text-dim: #d6c4ec;
+  --ink: var(--purple-950);
+
+  /* Typography */
+  --font-heading: var(--font-lilita), "Arial Black", system-ui, sans-serif;
+  --font-body: var(--font-nunito), system-ui, sans-serif;
+  --text-xs: clamp(11px, 0.62rem + 0.25vw, 13px);
+  --text-sm: clamp(13px, 0.74rem + 0.25vw, 15px);
+  --text-md: clamp(15px, 0.86rem + 0.3vw, 17px);
+  --text-lg: clamp(17px, 0.95rem + 0.5vw, 21px);
+  --text-xl: clamp(20px, 1rem + 1vw, 28px);
+  --text-hero: clamp(30px, 1.2rem + 3.6vw, 54px);
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* Motion */
+  --dur-fast: 90ms;
+  --dur-med: 180ms;
+  --dur-slow: 320ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.3, 1);
+  --ease-back: cubic-bezier(0.3, 1.4, 0.5, 1);
+
+  /* Low-poly facets laid over any face colour */
+  --facets:
+    linear-gradient(118deg, rgb(255 255 255 / 0.09) 0 24%, transparent 24.2%),
+    linear-gradient(64deg, transparent 0 56%, rgb(255 255 255 / 0.06) 56.2% 79%, transparent 79.2%),
+    linear-gradient(200deg, transparent 0 66%, rgb(0 0 0 / 0.12) 66.2%),
+    linear-gradient(332deg, rgb(0 0 0 / 0.1) 0 28%, transparent 28.2%),
+    linear-gradient(14deg, transparent 0 38%, rgb(255 255 255 / 0.05) 38.2% 54%, transparent 54.2%);
 }
 
 *, *::before, *::after {
@@ -16,113 +75,404 @@
 html, body {
   margin: 0;
   height: 100%;
-  background: var(--purple);
-  color: var(--ink);
-  font-family: var(--font);
-  font-size: 18px;
+  background: var(--purple-900);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--text-md);
+  line-height: 1.4;
 }
 
-/* Low-poly backdrop made of overlapping triangles */
-body::before {
+h1, h2, h3 {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-weight: 400;
+  line-height: 1.05;
+}
+
+p {
+  margin: 0;
+}
+
+/* ---------- Plate primitive ---------- */
+
+.plate {
+  --cut: 14px; /* chamfer size */
+  --bw: 6px; /* frame thickness */
+  --bev: 3px; /* lit and shaded outer bevel */
+  --stud: 0px; /* diamond studs on the top and bottom edges */
+  --lift: 4px; /* depth of the hard shadow */
+  --frame-hi: var(--gold-300);
+  --frame: var(--gold-500);
+  --frame-lo: var(--gold-700);
+  --face-hi: var(--purple-600);
+  --face: var(--purple-700);
+  --face-lo: var(--purple-800);
+  --plate-shadow: drop-shadow(0 var(--lift) 0 var(--purple-950)) drop-shadow(0 6px 8px rgb(16 4 32 / 0.35));
+
+  position: relative;
+  isolation: isolate;
+  filter: var(--plate-shadow);
+}
+
+.plate::before, .plate::after {
   content: "";
-  position: fixed;
-  inset: 0;
+  position: absolute;
   z-index: -1;
-  background:
-    linear-gradient(135deg, var(--blue) 0 50%, transparent 50%) 0 0 / 50% 50% no-repeat,
-    linear-gradient(225deg, var(--yellow) 0 50%, transparent 50%) 100% 0 / 40% 45% no-repeat,
-    linear-gradient(45deg, var(--red) 0 50%, transparent 50%) 0 100% / 45% 50% no-repeat,
-    linear-gradient(315deg, var(--green) 0 50%, transparent 50%) 100% 100% / 55% 40% no-repeat,
-    var(--purple);
+  clip-path: polygon(
+    var(--c) var(--s), calc(50% - var(--s)) var(--s), 50% 0, calc(50% + var(--s)) var(--s),
+    calc(100% - var(--c)) var(--s), 100% calc(var(--s) + var(--c)),
+    100% calc(100% - var(--s) - var(--c)), calc(100% - var(--c)) calc(100% - var(--s)),
+    calc(50% + var(--s)) calc(100% - var(--s)), 50% 100%, calc(50% - var(--s)) calc(100% - var(--s)),
+    var(--c) calc(100% - var(--s)), 0 calc(100% - var(--s) - var(--c)), 0 calc(var(--s) + var(--c))
+  );
 }
 
-.home {
-  display: flex;
+/* Frame: lit top and left bevels, shaded bottom and right, studs stick out of the box */
+.plate::before {
+  --c: var(--cut);
+  --s: var(--stud);
+
+  inset: calc(var(--stud) * -1) 0;
+  background:
+    linear-gradient(var(--frame-hi) 0 0) 0 var(--stud) / 100% var(--bev) no-repeat,
+    linear-gradient(var(--frame-lo) 0 0) 0 calc(100% - var(--stud)) / 100% var(--bev) no-repeat,
+    linear-gradient(color-mix(in srgb, var(--frame-hi) 55%, var(--frame)) 0 0) 0 0 / var(--bev) 100% no-repeat,
+    linear-gradient(color-mix(in srgb, var(--frame-lo) 55%, var(--frame)) 0 0) 100% 0 / var(--bev) 100% no-repeat,
+    linear-gradient(172deg, var(--frame-hi), var(--frame) 30% 70%, var(--frame-lo));
+}
+
+/* Face: faceted surface, recessed under the frame */
+.plate::after {
+  --c: calc(var(--cut) - var(--bw) * 0.41);
+  --s: 0px;
+
+  inset: var(--bw);
+  background: var(--facets), linear-gradient(176deg, var(--face-hi), var(--face) 45%, var(--face-lo));
+  box-shadow: inset 0 3px 0 rgb(0 0 0 / 0.25), inset 0 -2px 0 rgb(255 255 255 / 0.1);
+}
+
+/* ---------- Buttons ---------- */
+
+.btn {
+  --cut: 10px;
+  --bw: 4px;
+  --bev: 2px;
+  --stud: 5px;
+
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 100%;
-  padding: 16px;
+  gap: var(--space-2);
+  min-width: 9.5em;
+  min-height: 50px;
+  padding: 10px 18px;
+  border: 0;
+  background: none;
+  color: #fff;
+  font: 400 var(--text-md) / 1.1 var(--font-heading);
+  text-align: center;
+  text-decoration: none;
+  text-shadow: 0 2px 0 rgb(0 0 0 / 0.35);
+  cursor: pointer;
+  user-select: none;
+  transition: transform var(--dur-fast) var(--ease-out), filter var(--dur-fast) var(--ease-out);
 }
 
-.card {
+.btn-primary {
+  --frame-hi: var(--purple-600);
+  --frame: var(--purple-800);
+  --frame-lo: var(--purple-950);
+  --face-hi: var(--gold-300);
+  --face: var(--gold-400);
+  --face-lo: var(--gold-500);
+
+  color: var(--ink);
+  text-shadow: 0 1px 0 rgb(255 255 255 / 0.45);
+}
+
+.btn-secondary {
+  --face-hi: var(--purple-500);
+  --face: var(--purple-600);
+  --face-lo: var(--purple-700);
+}
+
+.btn-success {
+  --face-hi: var(--green-400);
+  --face: var(--green-500);
+  --face-lo: var(--green-600);
+}
+
+.btn-danger {
+  --face-hi: var(--red-400);
+  --face: var(--red-500);
+  --face-lo: var(--red-600);
+}
+
+.btn-neutral {
+  --frame-hi: var(--purple-500);
+  --frame: var(--purple-700);
+  --frame-lo: var(--purple-900);
+  --face-hi: var(--purple-700);
+  --face: var(--purple-800);
+  --face-lo: var(--purple-900);
+
+  color: var(--text-dim);
+}
+
+.btn:not(:disabled):hover {
+  --lift: 6px;
+
+  transform: translateY(-2px);
+}
+
+.btn:not(:disabled):hover::before {
+  filter: brightness(1.12);
+}
+
+.btn:not(:disabled):hover::after {
+  filter: brightness(1.12) saturate(1.08);
+}
+
+.btn:not(:disabled):active {
+  --lift: 3px;
+
+  transform: translateY(1px) scale(0.99, 0.98);
+  transition-duration: 50ms;
+}
+
+.btn:focus-visible {
+  outline: 3px solid var(--gold-200);
+  outline-offset: 6px;
+}
+
+.btn[aria-pressed="true"] {
+  --frame-hi: #fff;
+  --frame: var(--gold-300);
+  --frame-lo: var(--gold-500);
+
+  filter: drop-shadow(0 0 7px rgb(255 214 90 / 0.85)) var(--plate-shadow);
+}
+
+.btn:disabled:not([aria-busy="true"]) {
+  --frame-hi: #cdb88e;
+  --frame: #a8936b;
+  --frame-lo: #7d6c4e;
+  --face-hi: #7c6c92;
+  --face: #6a5a80;
+  --face-lo: #574a6b;
+
+  color: rgb(255 255 255 / 0.6);
+  text-shadow: none;
+  cursor: not-allowed;
+}
+
+/* Busy keeps its colours: it is waiting, not unavailable */
+.btn[aria-busy="true"] {
+  cursor: progress;
+}
+
+.btn-spinner {
+  width: 0.8em;
+  height: 0.8em;
+  background: currentColor;
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  animation: spin 0.8s linear infinite;
+}
+
+/* ---------- Dialogs ---------- */
+
+.dialog {
+  --cut: 26px;
+  --bw: 10px;
+  --bev: 4px;
+  --stud: 10px;
+  --lift: 6px;
+
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
-  max-width: 460px;
-  padding: 24px 28px 28px;
-  border: 5px solid var(--ink);
-  border-radius: 24px;
-  background: var(--paper);
-  box-shadow: 10px 10px 0 var(--ink);
+  gap: var(--space-3);
+  width: 100%;
+  max-height: calc(100dvh - 2 * var(--space-6));
+  padding: 0 clamp(20px, 4vw, 32px) clamp(24px, 4vw, 32px);
   text-align: center;
-  transform: rotate(-1.5deg);
+  animation: dialog-in var(--dur-slow) var(--ease-back) both;
 }
 
-.gavel {
-  font-size: 64px;
-  line-height: 1;
-  animation: bonk 1.4s ease-in-out infinite;
-  transform-origin: 80% 80%;
+.dialog-standard {
+  max-width: 460px;
 }
 
-@keyframes bonk {
-  0%, 100% { transform: rotate(-18deg); }
-  50% { transform: rotate(12deg); }
+.dialog-compact {
+  --cut: 20px;
+  --bw: 8px;
+
+  max-width: 380px;
+  gap: var(--space-2);
 }
 
-h1 {
-  margin: 0;
-  font-size: clamp(34px, 8vw, 52px);
-  line-height: 1;
+/* Sits on the top edge of the frame */
+.dialog-emblem {
+  display: flex;
+  justify-content: center;
+  margin-top: -30px;
+}
+
+.dialog-emblem .emblem {
+  width: 170px;
+  height: auto;
+}
+
+.dialog-compact .dialog-emblem {
+  margin-top: -24px;
+}
+
+.dialog-compact .dialog-emblem .emblem {
+  width: 140px;
+}
+
+.dialog-title {
+  color: var(--gold-300);
+  font-size: var(--text-xl);
+  font-weight: 400;
+  text-shadow: 0 2px 0 var(--purple-950);
+}
+
+.dialog-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  overflow-y: auto;
+  min-height: 0;
+  /* Room for the plate shadows and entrance motion, so no scrollbar flashes */
+  margin: -4px -8px -12px;
+  padding: 4px 8px 12px;
+  color: var(--text);
+}
+
+/* One button centred, two side by side, three stacked, four in a 2×2 grid */
+.dialog-actions {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: var(--space-3);
+  width: 100%;
+  margin-top: var(--space-2);
+}
+
+.dialog-actions:has(> :only-child) {
+  grid-auto-columns: minmax(0, 18em);
+  justify-content: center;
+}
+
+.dialog-actions:has(> :nth-child(3):last-child) {
+  grid-auto-flow: row;
+}
+
+.dialog-actions:has(> :nth-child(4)) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-flow: row;
+}
+
+.dialog-actions > .btn {
+  min-width: 0;
+  width: 100%;
+}
+
+/* ---------- Badges, notices, keys ---------- */
+
+.badge {
+  --cut: 7px;
+  --bw: 3px;
+  --bev: 1px;
+  --lift: 2px;
+  --frame-hi: var(--purple-600);
+  --frame: var(--purple-800);
+  --frame-lo: var(--purple-950);
+  --face-hi: var(--gold-300);
+  --face: var(--gold-400);
+  --face-lo: var(--gold-500);
+
+  display: inline-block;
+  padding: 5px 14px;
+  color: var(--ink);
+  font: 800 var(--text-xs) / 1.2 var(--font-body);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--red);
-  -webkit-text-stroke: 2px var(--ink);
-  paint-order: stroke fill;
-  text-shadow: 4px 4px 0 var(--ink);
 }
 
-.card p {
-  margin: 0;
+.notice {
+  --cut: 9px;
+  --bw: 3px;
+  --bev: 1px;
+  --lift: 2px;
+
+  padding: 8px 16px;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  animation: notice-in var(--dur-med) var(--ease-back) both;
 }
 
-.sticker {
-  padding: 2px 12px;
-  border: 3px solid var(--ink);
-  border-radius: 999px;
-  background: var(--yellow);
-  font-size: 14px;
-  transform: rotate(3deg);
+.notice-success {
+  --face-hi: var(--green-500);
+  --face: var(--green-600);
+  --face-lo: var(--green-700);
 }
 
-.button {
-  padding: 10px 22px;
-  border: 4px solid var(--ink);
-  border-radius: 16px;
-  background: var(--red);
-  color: #fff;
-  font: inherit;
-  font-size: 20px;
-  text-decoration: none;
-  text-shadow: 2px 2px 0 var(--ink);
-  box-shadow: 5px 5px 0 var(--ink);
-  cursor: pointer;
-  transition: transform 0.1s, box-shadow 0.1s;
+.notice-error {
+  --face-hi: var(--red-500);
+  --face: var(--red-600);
+  --face-lo: var(--red-700);
 }
 
-.button:hover {
-  transform: translate(-2px, -2px) rotate(-1deg);
-  box-shadow: 7px 7px 0 var(--ink);
+kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.9em;
+  height: 1.9em;
+  padding: 0 0.45em;
+  background: linear-gradient(var(--cream-100), var(--cream-200));
+  box-shadow: inset 0 -3px 0 var(--cream-300), inset 0 0 0 2px var(--gold-500);
+  color: var(--ink);
+  font: 800 var(--text-xs) / 1 var(--font-body);
+  clip-path: polygon(4px 0, calc(100% - 4px) 0, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 0 calc(100% - 4px), 0 4px);
 }
 
-.button:active {
-  transform: translate(4px, 4px);
-  box-shadow: 1px 1px 0 var(--ink);
+/* ---------- Screens outside the 3D room ---------- */
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 100%;
+  padding: var(--space-6) var(--space-4);
+  background: url("/assets/ui/backdrop.webp") center / cover var(--purple-900);
 }
 
-.button.innocent {
-  background: var(--green);
+.screen-logo {
+  width: clamp(120px, 26vw, 180px);
+  height: auto;
+  margin-bottom: calc(var(--space-6) * -1);
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 6px 0 rgb(28 8 50 / 0.5));
+  animation: dialog-in var(--dur-slow) var(--ease-back) both;
 }
+
+.screen-logo + .dialog .dialog-title {
+  font-size: var(--text-hero);
+  text-transform: uppercase;
+}
+
+/* The logo replaces the gavel emblem on the home dialog */
+.screen-logo + .dialog {
+  padding-top: var(--space-6);
+}
+
+/* ---------- 3D room and HUD ---------- */
 
 .room {
   overflow: hidden;
@@ -137,151 +487,196 @@ h1 {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 12px;
-  padding: 16px;
+  gap: var(--space-3);
+  padding: var(--space-4);
 }
 
-.hud-top {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.hud-bottom {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.panel {
-  max-width: min(440px, 100%);
-  padding: 12px 16px;
-  border: 4px solid var(--ink);
-  border-radius: 18px;
-  background: var(--paper);
-  box-shadow: 5px 5px 0 var(--ink);
+.hud .dialog {
   pointer-events: auto;
 }
 
-.pill {
-  display: inline-block;
-  padding: 2px 12px;
-  border: 3px solid var(--ink);
-  border-radius: 999px;
-  background: var(--yellow);
-  font-size: 14px;
-  text-transform: uppercase;
+.hud-top {
+  display: grid;
+  grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-4);
+}
+
+.hud-bottom {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-areas: "corner center .";
+  align-items: end;
+  gap: var(--space-3);
+}
+
+.hud-corner {
+  grid-area: corner;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.hud-center {
+  grid-area: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.panel {
+  --cut: 16px;
+  --bw: 6px;
+
+  padding: 14px 18px 16px;
 }
 
 .case {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
 .case-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .timer {
-  font-size: 26px;
+  --cut: 8px;
+  --bw: 3px;
+  --bev: 1px;
+  --lift: 2px;
+  --frame-hi: var(--purple-500);
+  --frame: var(--purple-700);
+  --frame-lo: var(--purple-950);
+  --face-hi: var(--purple-900);
+  --face: var(--purple-950);
+  --face-lo: var(--purple-950);
+
+  padding: 4px 12px;
+  color: var(--gold-300);
+  font: 400 var(--text-lg) / 1.1 var(--font-heading);
   font-variant-numeric: tabular-nums;
 }
 
+.timer.is-hurry {
+  color: var(--red-400);
+  animation: hurry 1s var(--ease-out) infinite;
+}
+
 .case-title {
-  margin: 0;
-  color: var(--red);
-  font-size: 20px;
-  line-height: 1.1;
+  color: var(--gold-300);
+  font-size: var(--text-lg);
+  font-weight: 400;
+  text-shadow: 0 2px 0 var(--purple-950);
 }
 
 .case-crime {
-  margin: 0;
+  font-style: italic;
+  font-weight: 600;
 }
 
 .case-people {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
   margin: 0;
   padding: 0;
-  font-size: 14px;
+  color: var(--text-dim);
+  font-size: var(--text-sm);
   list-style: none;
 }
 
-.verdict-card {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-  background: var(--yellow);
+.case-label {
+  margin-right: var(--space-1);
+  color: var(--gold-400);
+  font-weight: 800;
 }
 
-.verdict-card p {
-  margin: 0;
-  font-size: 20px;
-  line-height: 1.15;
-}
+.verdict {
+  --cut: 22px;
+  --bw: 9px;
+  --bev: 4px;
+  --stud: 9px;
+  --lift: 6px;
 
-.vote-card {
+  justify-self: center;
   display: flex;
   flex-direction: column;
   align-items: center;
-  align-self: center;
-  gap: 10px;
-  background: var(--yellow);
+  gap: var(--space-2);
+  max-width: 520px;
+  padding: 0 28px 22px;
+  text-align: center;
+  animation: verdict-slam 520ms var(--ease-out) both;
 }
 
-.vote-card h3 {
-  margin: 0;
-  font-size: 22px;
+.verdict .emblem {
+  width: 130px;
+  height: auto;
+  margin-top: -26px;
 }
 
-.vote-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 12px;
+.verdict .emblem-gavel {
+  transform-origin: 82px 34px;
+  animation: gavel-strike 520ms var(--ease-out) both;
 }
 
-.vote-note {
-  margin: 0;
-  padding: 2px 12px;
-  border: 3px solid var(--ink);
-  border-radius: 12px;
-  background: #fff;
-  font-size: 15px;
-}
-
-.vote-note.ok {
-  background: var(--green);
-}
-
-.vote-note.error {
-  background: var(--red);
-  color: #fff;
+.verdict-line {
+  font: 400 var(--text-lg) / 1.2 var(--font-heading);
+  text-shadow: 0 2px 0 var(--purple-950);
 }
 
 .role {
-  padding: 4px 14px;
-  border: 3px solid var(--ink);
-  border-radius: 12px;
-  background: var(--blue);
-  box-shadow: 3px 3px 0 var(--ink);
-  color: #fff;
-  font-size: 16px;
-  text-shadow: 2px 2px 0 var(--ink);
+  --cut: 10px;
+  --bw: 4px;
+  --bev: 2px;
+  --lift: 3px;
+
+  display: flex;
+  flex-direction: column;
+  padding: 7px 16px 8px;
+  font: 400 var(--text-md) / 1.15 var(--font-heading);
 }
 
+.role-label {
+  color: var(--gold-400);
+  font: 800 var(--text-xs) / 1.2 var(--font-body);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Contextual prompt: shown when the player stands next to something to do */
+.prompt {
+  --cut: 12px;
+  --bw: 5px;
+  --bev: 2px;
+
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 8px 18px 8px 10px;
+  font: 400 var(--text-lg) / 1.1 var(--font-heading);
+  animation: notice-in var(--dur-med) var(--ease-back) both;
+}
+
+.prompt kbd {
+  min-width: 2.2em;
+  height: 2.2em;
+  font-size: var(--text-md);
+}
+
+/* Control reminders: deliberately lighter than the plates */
 .hints {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-2);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -290,65 +685,176 @@ h1 {
 .hint {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border: 3px solid var(--ink);
-  border-radius: 12px;
-  background: var(--paper);
-  box-shadow: 3px 3px 0 var(--ink);
-  font-size: 14px;
+  gap: var(--space-1);
+  padding: 4px 10px 4px 5px;
+  background: rgb(28 8 50 / 0.78);
+  color: var(--text-dim);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 6px, 100% calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px), 0 6px);
 }
 
-.hint.action {
-  background: var(--yellow);
-  font-size: 17px;
-  animation: nudge 1s ease-in-out infinite;
+.hint kbd {
+  min-width: 1.7em;
+  height: 1.7em;
 }
 
-kbd {
-  padding: 0 7px;
-  border: 2px solid var(--ink);
-  border-radius: 6px;
-  background: #fff;
-  box-shadow: 0 2px 0 var(--ink);
-  font: inherit;
-  font-size: 13px;
-}
-
-@keyframes nudge {
-  50% { transform: translateY(-3px); }
-}
-
-@media (max-width: 600px) {
-  .hud { padding: 8px; }
-  .panel { padding: 8px 12px; }
-  .timer { font-size: 22px; }
-  .hint { font-size: 12px; }
-}
-
+/* World-space labels above the characters */
 .tag {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   pointer-events: none;
   white-space: nowrap;
 }
 
+/* Gold layer clipped to the chamfer, purple face clipped again inside it, so the border follows the cut corners */
 .name {
-  padding: 1px 8px;
-  border: 2px solid var(--ink);
-  border-radius: 8px;
-  background: var(--yellow);
-  font-size: 13px;
+  position: relative;
+  isolation: isolate;
+  padding: 4px 12px;
+  background: linear-gradient(var(--gold-300), var(--gold-600));
+  color: var(--text);
+  font: 400 13px / 1.3 var(--font-heading);
+  clip-path: polygon(7px 0, calc(100% - 7px) 0, 100% 7px, 100% calc(100% - 7px), calc(100% - 7px) 100%, 7px 100%, 0 calc(100% - 7px), 0 7px);
+}
+
+.name::before {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  z-index: -1;
+  background: linear-gradient(var(--purple-600), var(--purple-800));
+  clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 6px, 100% calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px), 0 6px);
 }
 
 .bubble {
-  max-width: 220px;
-  padding: 6px 10px;
-  border: 3px solid var(--ink);
+  position: relative;
+  max-width: 230px;
+  padding: 7px 12px;
+  border: 3px solid var(--purple-700);
   border-radius: 14px;
-  background: #fff;
-  font-size: 14px;
+  background: var(--cream-100);
+  box-shadow: 0 3px 0 var(--purple-950);
+  color: var(--ink);
+  font: 600 14px / 1.3 var(--font-body);
   white-space: normal;
+}
+
+.bubble::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -9px;
+  width: 14px;
+  height: 14px;
+  border: solid var(--purple-700);
+  border-width: 0 3px 3px 0;
+  background: var(--cream-100);
+  transform: translateX(-50%) rotate(45deg);
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 860px) {
+  .hud-top {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .hud-bottom {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "center" "corner";
+  }
+
+  .verdict {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 600px) {
+  .hud {
+    padding: var(--space-2);
+  }
+
+  .panel {
+    padding: 10px 14px 12px;
+  }
+}
+
+/* Short embedded Activity windows: keep the scene visible */
+@media (max-height: 560px) {
+  .case-people, .hints {
+    display: none;
+  }
+
+  .dialog-compact .dialog-emblem .emblem, .verdict .emblem {
+    width: 96px;
+  }
+}
+
+/* ---------- Animations ---------- */
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.94);
+  }
+}
+
+@keyframes notice-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+}
+
+@keyframes verdict-slam {
+  0% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+
+  45% {
+    opacity: 1;
+    transform: scale(0.94);
+  }
+
+  60% {
+    transform: scale(1.03) rotate(-1deg);
+  }
+
+  75% {
+    transform: scale(0.99) rotate(0.6deg);
+  }
+}
+
+@keyframes gavel-strike {
+  0% {
+    transform: rotate(-40deg);
+  }
+
+  45% {
+    transform: rotate(12deg);
+  }
+}
+
+@keyframes hurry {
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
 }

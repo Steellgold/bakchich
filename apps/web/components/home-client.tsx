@@ -1,9 +1,11 @@
 "use client";
 
+import { GameButton, GameDialog } from "@/components/game-ui";
 import { attempt } from "@/lib/attempt";
 import { authClient } from "@/lib/auth-client";
 import { activityRoomUrl, isDiscordActivity, signInActivity } from "@/lib/discord-activity";
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -40,24 +42,27 @@ export const HomeClient = ({ clientId, signedIn }: { clientId: string; signedIn:
   if (activityToken !== null) return <RoomClient url={activityRoomUrl()} token={activityToken} />;
 
   return (
-    <main className="home">
-      <div className="card">
-        <div className="gavel">🔨</div>
-        <h1>Tribunal du Royaume</h1>
-        <span className="sticker">Justice 100% corrompue</span>
+    <main className="screen">
+      <Image className="screen-logo" src="/assets/ui/logo.webp" alt="" width={180} height={180} priority unoptimized />
+      <GameDialog
+        title="Tribunal du Royaume"
+        emblem={null}
+        subtitle={<span className="plate badge">Justice 100% corrompue</span>}
+        actions={(
+          <GameButton
+            variant="primary"
+            loading={pending}
+            onClick={() => {
+              void connect();
+            }}
+          >
+            {pending ? "Connexion en cours…" : signedIn ? "Entrer dans la salle d'audience" : "Se connecter avec Discord"}
+          </GameButton>
+        )}
+      >
         <p>La cour est corrompue, le juge aussi. Entrez, asseyez-vous, votez.</p>
-        <button
-          type="button"
-          className="button"
-          disabled={pending}
-          onClick={() => {
-            void connect();
-          }}
-        >
-          {pending ? "Connexion en cours…" : signedIn ? "Entrer dans la salle d'audience" : "Se connecter avec Discord"}
-        </button>
-        {error !== null && <p role="alert">{error}</p>}
-      </div>
+        {error !== null && <p className="plate notice notice-error" role="alert">{error}</p>}
+      </GameDialog>
     </main>
   );
 };

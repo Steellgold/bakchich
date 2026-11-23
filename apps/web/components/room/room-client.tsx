@@ -9,6 +9,7 @@ import { Courtroom } from "./courtroom";
 import { Hud } from "./hud";
 import { PlayerController } from "./player-controller";
 import { isBenchSeat, seatById } from "./seats";
+import { GameDialog } from "@/components/game-ui";
 import { useRoomSocket } from "@/lib/use-room-socket";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { JUDGE_NAME, MAX_SPEED, ROOM, SEATS } from "@tribunal/bot/room/layout";
@@ -66,11 +67,10 @@ export const RoomClient = ({ url, token }: { url: string; token?: string }) => {
 
   if (rejected !== null) {
     return (
-      <main className="home">
-        <div className="card">
+      <main className="screen">
+        <GameDialog size="compact" title="Audience interrompue" actions={<Link className="plate btn btn-secondary" href="/">Retour</Link>}>
           <p>{rejected}</p>
-          <Link className="button" href="/">Retour</Link>
-        </div>
+        </GameDialog>
       </main>
     );
   }
@@ -87,7 +87,7 @@ export const RoomClient = ({ url, token }: { url: string; token?: string }) => {
         <directionalLight position={[6, 14, 10]} intensity={2.2} castShadow />
         <Courtroom />
 
-        <Character id={SEATS.judge.id} name={JUDGE_NAME} avatarUrl={null} position={SEATS.judge.position} rotation={SEATS.judge.rotation} seated speech={latestSpeech(speeches, null)} speaking={speaking.has("judge")} color="#8e5bff" elevation={1.05} wig />
+        <Character id={SEATS.judge.id} name={JUDGE_NAME} avatarUrl={null} position={SEATS.judge.position} rotation={SEATS.judge.rotation} seated speech={latestSpeech(speeches, null)} speaking={speaking.has("judge")} elevation={1.05} wig />
 
         {snapshot?.npcs.map((npc) => {
           const seat = seatById.get(npc.seatId);
