@@ -1,0 +1,15 @@
+FROM node:24-alpine
+WORKDIR /app
+
+# Install PNPM:
+RUN npm install -g pnpm
+
+# Install dependencies:
+COPY ./package.json ./pnpm-lock.yaml ./pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
+
+# Copy all folders and files:
+COPY . .
+
+# Run the server:
+CMD pnpm run start
