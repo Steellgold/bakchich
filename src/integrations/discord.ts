@@ -25,13 +25,10 @@ export const conversation = {
 export const discordClient = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.DirectMessages,
     GatewayIntentBits.MessageContent,
   ],
   partials: [
-    Partials.Channel,
     Partials.Message,
   ],
 });

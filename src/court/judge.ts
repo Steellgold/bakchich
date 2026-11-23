@@ -58,6 +58,13 @@ const describeVerdict = (verdict: Verdict) => dedent`
 
 const formatRecordEntry = (entry: RecordEntry) => `- ${entry.createdAt.toLocaleDateString("fr-FR")} : « ${entry.crime} » (plainte de ${entry.plaintiffName}) : ${entry.guilty ? "coupable" : "acquitté"}${entry.reversed ? " (verdict renversé)" : ""}${entry.sentence === null ? "" : `, peine : ${entry.sentence}`}`;
 
+/** Verdict line built by the code, appended to the judge's text so the AI can never change the official outcome */
+export const formatVerdictLine = (verdict: Verdict, sentence: string | null): string => {
+  const how = verdict.reversed ? "renversé par le juge" : verdict.coinFlip ? "pile ou face" : "";
+  const details = `${String(verdict.guiltyVotes)} voix contre ${String(verdict.innocentVotes)}${how === "" ? "" : `, ${how}`}`;
+  return `⚖️ Verdict officiel : ${verdict.guilty ? "COUPABLE" : "NON COUPABLE"} (${details}).${sentence === null ? "" : ` Peine : ${sentence}`}`;
+};
+
 const firstWordIs = (text: string, word: string) => (text.split(/\s+/u)[0] ?? "").replace(/[^\p{L}]/gu, "").toLowerCase() === word;
 
 export const createJudge = (generate: Generate) => ({

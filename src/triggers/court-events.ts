@@ -2,8 +2,10 @@ import type { CourtEvent, Trial } from "#/court/engine";
 import type { Message } from "discord.js";
 import { court, judge } from "#/court/court";
 import { VOTE_MS } from "#/court/engine";
+import { formatVerdictLine } from "#/court/judge";
 import { saveTrial } from "#/court/record";
 import { fetchDiscordSendableChannel, fetchRecentHumanMessages, sendSafeMessage, startDiscordTyping } from "#/integrations/discord";
+import { attempt } from "#/utils/attempt";
 import { logger } from "#/utils/logger";
 import { trigger } from "#/utils/trigger";
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
@@ -41,17 +43,20 @@ const handleEvent = async (event: CourtEvent) => {
     return;
   }
 
+  // The record is the durable outcome: saved before any Discord call that could fail.
+  const sentence = event.verdict.guilty ? await judge.sentence(trial) : null;
+  await saveTrial(trial, event.verdict, sentence);
+
+  // The vote message may have been deleted meanwhile: disabling its buttons is best effort.
   const voteMessage = voteMessages.get(trial.id);
   voteMessages.delete(trial.id);
-  if (voteMessage !== undefined) await voteMessage.edit({ components: voteButtons(trial.id, true) });
+  if (voteMessage !== undefined) await attempt(async () => voteMessage.edit({ components: voteButtons(trial.id, true) }));
 
   const stopTyping = startDiscordTyping(channel, () => logger.warn("Could not send the typing indicator"));
-  const sentence = event.verdict.guilty ? await judge.sentence(trial) : null;
   const recent = await fetchRecentHumanMessages(channel, VERDICT_CONTEXT_MESSAGES);
   const text = await judge.verdict(trial, event.verdict, sentence, recent.lines).finally(stopTyping);
 
-  await sendSafeMessage(channel, text, involvedIds(trial));
-  await saveTrial(trial, event.verdict, sentence);
+  await sendSafeMessage(channel, `${text}\n\n${formatVerdictLine(event.verdict, sentence)}`, involvedIds(trial));
   logger.info(`Trial ${trial.id} closed: ${event.verdict.guilty ? "guilty" : "not guilty"}${event.verdict.reversed ? " (reversed)" : ""}`);
 };
 
