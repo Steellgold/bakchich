@@ -8,10 +8,10 @@ import { saveHearing } from "#/court/hearings";
 import { upsertMember } from "#/court/members";
 import { fetchRecord } from "#/court/record";
 import { AGENTS_CATEGORY_ID, conversation, createHearingRoom, discordClient, fetchRecentHumanMessages, findDiscordGuildMember, getCategoryId, sanitizeDiscordMessage, startDiscordTyping } from "#/integrations/discord";
-import { forceStartAnswers, forceStartHearing, hasPendingHearing, judgeSays, scheduleHearing } from "#/triggers/hearings";
+import { collectContext, forceStartAnswers, forceStartHearing, hasPendingHearing, judgeSays, scheduleHearing } from "#/triggers/hearings";
 import { logger } from "#/utils/logger";
 import { trigger } from "#/utils/trigger";
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, UserSelectMenuBuilder } from "discord.js";
 
 const CONTEXT_MESSAGES = 10;
 const LAWYER_LOOKUP_MESSAGES = 100;
@@ -25,9 +25,15 @@ const reply = async (message: Message, content: string, components?: MessageRepl
   components,
 });
 
-// Under the announcement of a hearing: the member who requested it can open it at once.
-const startNowButton = () => [
-  new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId("hearing-start").setLabel("Ouvrir maintenant").setStyle(ButtonStyle.Primary)),
+// Under the announcement of a hearing: open it at once (the member who requested it), ask for the court-appointed lawyer, or pick a lawyer who must accept.
+const hearingComponents = () => [
+  new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId("hearing-start").setLabel("Ouvrir maintenant").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("hearing-ai-lawyer").setLabel("Avocat commis d'office").setStyle(ButtonStyle.Secondary),
+  ),
+  new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(
+    new UserSelectMenuBuilder().setCustomId("hearing-lawyer").setPlaceholder("Les accusés : choisir un avocat").setMinValues(1).setMaxValues(1),
+  ),
 ];
 
 const authorName = (message: Message) => message.member?.displayName ?? message.author.username;
@@ -101,7 +107,7 @@ const openHearing = async (message: Message<true>, accusedIds: string[], crime: 
   });
   scheduleHearing(hearing);
 
-  if (room !== null) await reply(message, `${EMOJI.courthouse} Procès de ${names} pour « ${crime} » : l'audience s'ouvre <t:${String(Math.round(startsAt.getTime() / 1000))}:R>. Rendez-vous dans <#${room.channelId}>.${room.eventUrl === null ? "" : ` Événement : ${room.eventUrl}`}`, startNowButton());
+  if (room !== null) await reply(message, `${EMOJI.courthouse} Procès de ${names} pour « ${crime} » : l'audience s'ouvre <t:${String(Math.round(startsAt.getTime() / 1000))}:R>. Rendez-vous dans <#${room.channelId}>. Les accusés ont jusque-là pour choisir un avocat, qui doit accepter, ou demander un avocat commis d'office.${room.eventUrl === null ? "" : ` Événement : ${room.eventUrl}`}`, hearingComponents());
 };
 
 // Channels with a request being checked: the checks take several seconds, two requests must not both pass them.
@@ -182,7 +188,10 @@ trigger.discordEvent("messageCreate", async (message) => {
   }
 
   // Trials are pleaded out loud in the voice channel: written messages only matter when they talk to the bot.
-  if (!mentioned) return;
+  if (!mentioned) {
+    collectContext(message.channelId, message.author.id, message.content);
+    return;
+  }
 
   const command = parseCommand(message.content, botUser.id);
   logger.info(`Command from ${message.author.username} in ${message.channelId}: ${command?.kind ?? "chat"}`);

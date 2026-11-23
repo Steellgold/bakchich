@@ -28,6 +28,12 @@ const screenInstructions = dedent`
   Your first word must be OK or REFUS.
 `;
 
+const defenseInstructions = dedent`
+  You are a theatrical, over-the-top court-appointed defense lawyer in a ridiculous fake trial between friends on a Discord server.
+  Always answer in French, in less than 500 characters, with no list and no title.
+  Never write @everyone or @here, and never mention anyone with @.
+`;
+
 const interpretInstructions = dedent`
   You are the clerk of the Tribunal of « Le Royaume », a game of absurd fake trials between friends on Discord.
   You receive a message addressed to the Tribunal. Decide what the author wants:
@@ -102,6 +108,15 @@ export const createJudge = (generate: Generate) => ({
     ${recentMessages.join("\n")}
     Intervene in one or two sentences: objection sustained or overruled, biased remark, threat of contempt of court.
   `, "Silence dans la salle ! La cour a faim, accélérez."),
+
+  /** Statement of the AI lawyer, from what the accused told it before the trial */
+  defense: async (trial: Trial, context: string[], stage: "opening" | "closing"): Promise<string> => ask(generate, defenseInstructions, dedent`
+    You defend ${accusedNames(trial)}, accused of « ${trial.crime} » by ${trial.plaintiff.name}.
+    What your ${isGroup(trial) ? "clients" : "client"} told you before the trial:
+    ${context.length === 0 ? "(nothing, improvise)" : context.join("\n")}
+    ${stage === "opening" ? "Give your opening statement." : "Give your closing statement and ask the jury for an acquittal."}
+    Never contradict what you were told.
+  `, stage === "opening" ? "Votre Honneur, mes clients sont innocents, et je le prouverai, ou à défaut je le crierai !" : "Mesdames et messieurs du jury, acquittez-les, ou j'invoque le droit de bouder."),
 
   sentence: async (trial: Trial): Promise<string> => ask(generate, persona, dedent`
     ${accusedNames(trial)} ${isGroup(trial) ? "are" : "is"} found guilty of « ${trial.crime} ».

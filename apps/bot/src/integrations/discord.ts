@@ -123,6 +123,26 @@ export const createHearingRoom = async (guild: Guild, input: { name: string; des
   }
 };
 
+/** Private-style voice room where the accused prepare their defense, limited to them and their lawyer. Null without audio category or when Discord refuses. */
+export const createPreparationRoom = async (guild: Guild, input: { name: string; places: number }): Promise<string | null> => {
+  if (env.DISCORD_VOICE_CATEGORY_ID === "") return null;
+
+  try {
+    const channel = await guild.channels.create({
+      name: sanitizeDiscordMessage(input.name).slice(0, 100),
+      type: ChannelType.GuildVoice,
+      parent: env.DISCORD_VOICE_CATEGORY_ID,
+      userLimit: input.places,
+      reason: "Tribunal defense preparation",
+    });
+    return channel.id;
+  }
+  catch (error) {
+    logger.warn(`Could not create the preparation room: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+};
+
 /** Best effort: only called with channels the bot created for a hearing */
 export const deleteHearingChannel = async (guild: Guild, channelId: string): Promise<void> => {
   try {

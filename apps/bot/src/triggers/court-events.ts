@@ -2,11 +2,11 @@ import type { CourtEvent, Trial, Verdict } from "#/court/engine";
 import type { Message } from "discord.js";
 import { court, judge } from "#/court/court";
 import { EMOJI } from "#/court/emojis";
-import { VOTE_MS } from "#/court/engine";
+import { AI_LAWYER, DEBATE_MS, VOTE_MS } from "#/court/engine";
 import { formatVerdictLine } from "#/court/judge";
 import { saveTrial } from "#/court/record";
 import { fetchDiscordSendableChannel, sendSafeMessage, startDiscordTyping } from "#/integrations/discord";
-import { completeHearing, judgeSays, voiceChannelOf } from "#/triggers/hearings";
+import { completeHearing, defenseContextOf, judgeSays, voiceChannelOf } from "#/triggers/hearings";
 import { attempt } from "#/utils/attempt";
 import { logger } from "#/utils/logger";
 import { trigger } from "#/utils/trigger";
@@ -23,7 +23,10 @@ const verdictEmojis = (verdict: Verdict) => [
   ...(verdict.coinFlip ? [EMOJI.justiceCoin] : []),
 ].join(" ");
 
-const involvedIds = (trial: Trial) => [...trial.accused.map((member) => member.id), trial.plaintiff.id, ...(trial.lawyer === null ? [] : [trial.lawyer.id])];
+const involvedIds = (trial: Trial) => [...trial.accused.map((member) => member.id), trial.plaintiff.id, ...(trial.lawyer === null || trial.lawyer.id === AI_LAWYER.id ? [] : [trial.lawyer.id])];
+
+// The AI lawyer's closing statement comes shortly before the end of the debate:
+const CLOSING_BEFORE_END_MS = 45_000;
 
 const voteButtons = (trialId: string, disabled: boolean) => [
   new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -31,6 +34,21 @@ const voteButtons = (trialId: string, disabled: boolean) => [
     new ButtonBuilder().setCustomId(`vote:${trialId}:innocent`).setLabel("Non coupable").setStyle(ButtonStyle.Success).setDisabled(disabled),
   ),
 ];
+
+/** The court-appointed AI lawyer pleads in the text channel, in the courtroom and out loud */
+const aiDefends = async (trial: Trial, stage: "opening" | "closing") => {
+  const channel = await fetchDiscordSendableChannel(trial.channelId);
+  const stopTyping = startDiscordTyping(channel, () => logger.warn("Could not send the typing indicator"));
+  const text = await judge.defense(trial, defenseContextOf(trial.channelId), stage).finally(stopTyping);
+
+  await sendSafeMessage(channel, `${EMOJI.unbalancedScales} **${AI_LAWYER.name}** : ${text}`, []);
+  court.say(trial.channelId, AI_LAWYER.id, text);
+  judgeSays(trial.channelId, text);
+};
+
+const closeDefense = trigger.safeListener("AI lawyer closing", async (trial: Trial) => {
+  if (court.get(trial.channelId)?.id === trial.id) await aiDefends(trial, "closing");
+});
 
 const handleEvent = async (event: CourtEvent) => {
   if (event.type === "vote-cast" || event.type === "speech") return;
@@ -44,6 +62,13 @@ const handleEvent = async (event: CourtEvent) => {
     await sendSafeMessage(channel, `${EMOJI.gavel} ${text}`, involvedIds(trial));
     court.say(trial.channelId, null, text);
     judgeSays(trial.channelId, text);
+
+    if (trial.lawyer?.id === AI_LAWYER.id) {
+      await aiDefends(trial, "opening");
+      setTimeout(() => {
+        closeDefense(trial);
+      }, DEBATE_MS - CLOSING_BEFORE_END_MS).unref();
+    }
     return;
   }
 

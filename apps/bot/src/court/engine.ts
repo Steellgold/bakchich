@@ -8,6 +8,9 @@ export const MAX_CRIME_LENGTH = 200;
 export const MAX_ACCUSED = 5;
 
 export type Member = { id: string; name: string };
+
+/** The court-appointed lawyer, played by the AI */
+export const AI_LAWYER: Member = { id: "ai-lawyer", name: "Maître Commis d'Office" };
 export type Phase = "debate" | "vote";
 
 export type Trial = {

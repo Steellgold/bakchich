@@ -7,6 +7,8 @@ export const tableHearing = pgTable("hearing", {
   id: uuid("id").primaryKey().defaultRandom(),
   channelId: text("channel_id").notNull(),
   accused: jsonb("accused").$type<Member[]>().notNull(),
+  /** Lawyer of the defense: a member who accepted, or the AI lawyer; null for no lawyer */
+  lawyer: jsonb("lawyer").$type<Member | null>(),
   plaintiffId: text("plaintiff_id").notNull(),
   plaintiffName: text("plaintiff_name").notNull(),
   crime: text("crime").notNull(),

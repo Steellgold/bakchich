@@ -1,0 +1,1 @@
+ALTER TABLE "hearing" ADD COLUMN "lawyer" jsonb;
