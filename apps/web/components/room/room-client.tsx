@@ -16,8 +16,8 @@ import { useState } from "react";
 const latestSpeech = (speeches: Speech[], speakerId: string | null) => speeches.findLast((speech) => speech.speakerId === speakerId)?.text ?? null;
 
 /** The courtroom page: 3D scene, local player, other members and the HUD */
-export const RoomClient = ({ url }: { url: string }) => {
-  const { selfId, snapshot, speeches, verdict, voteResult, rejected, send } = useRoomSocket(url);
+export const RoomClient = ({ url, token }: { url: string; token?: string }) => {
+  const { selfId, snapshot, speeches, verdict, voteResult, rejected, send } = useRoomSocket(url, token);
   const [interaction, setInteraction] = useState<NearbyInteraction>(null);
 
   if (rejected !== null) {

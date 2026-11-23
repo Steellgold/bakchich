@@ -15,9 +15,10 @@ const SESSION_TIMEOUT_MS = 5_000;
 
 const sessionSchema = z.object({ user: z.object({ id: z.string() }) }).nullable();
 
-/** Web session behind a cookie header, with the Discord ID of its user (null when the user has no Discord account) */
-export const fetchSession = async (cookieHeader: string): Promise<{ discordId: string | null } | null> => {
-  const response = await fetch(`${env.WEB_INTERNAL_URL}/api/auth/get-session`, { headers: { cookie: cookieHeader }, signal: AbortSignal.timeout(SESSION_TIMEOUT_MS) });
+/** Web session behind a browser cookie or an Activity bearer token, with its user's Discord ID */
+export const fetchSession = async (credentials: { cookie: string } | { token: string }): Promise<{ discordId: string | null } | null> => {
+  const headers = "cookie" in credentials ? { cookie: credentials.cookie } : { authorization: `Bearer ${credentials.token}` };
+  const response = await fetch(`${env.WEB_INTERNAL_URL}/api/auth/get-session`, { headers, signal: AbortSignal.timeout(SESSION_TIMEOUT_MS) });
   if (!response.ok) return null;
 
   const parsed = sessionSchema.safeParse(await response.json());

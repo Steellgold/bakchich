@@ -65,18 +65,28 @@ const checkMember = async (discordId: string) => {
   };
 };
 
-// Without a cookie (e.g. inside a Discord Activity), the client sends its session token as the first message:
-const waitForTokenCookie = async (socket: WebSocket) => new Promise<string | null>((resolve) => {
-  const timer = setTimeout(() => {
-    resolve(null);
-  }, AUTH_TIMEOUT_MS);
+// Start listening before checking cookies: an Activity sends its token as soon as the socket opens.
+const waitForToken = (socket: WebSocket) => {
+  let cancel: () => void = () => undefined;
+  const promise = new Promise<string | null>((resolve) => {
+    const onMessage = (raw: RawData) => {
+      const message = parseClientMessage(rawText(raw));
+      resolve(message?.type === "auth" ? message.token : null);
+    };
+    const onClose = () => resolve(null);
+    const timer = setTimeout(onClose, AUTH_TIMEOUT_MS);
+    cancel = () => {
+      clearTimeout(timer);
+      socket.off("message", onMessage);
+      socket.off("close", onClose);
+      resolve(null);
+    };
 
-  socket.once("message", (raw) => {
-    clearTimeout(timer);
-    const message = parseClientMessage(rawText(raw));
-    resolve(message?.type === "auth" ? `better-auth.session_token=${message.token}` : null);
-  });
-});
+    socket.once("message", onMessage);
+    socket.once("close", onClose);
+  }).finally(() => cancel());
+  return { promise, cancel };
+};
 
 const trialView = (trial: Trial): TrialView => ({
   id: trial.id,
@@ -140,9 +150,13 @@ const reject = (socket: WebSocket, reason: string) => {
 };
 
 const authorize = async (socket: WebSocket, request: IncomingMessage) => {
-  const cookie = request.headers.cookie ?? await waitForTokenCookie(socket);
+  const pendingToken = waitForToken(socket);
+  const cookieSession = request.headers.cookie === undefined ? null : await fetchSession({ cookie: request.headers.cookie });
+  if (cookieSession !== null) pendingToken.cancel();
+  const token = cookieSession === null ? await pendingToken.promise : null;
+
   return authorizeConnection({
-    getSession: async () => (cookie === null ? null : fetchSession(cookie)),
+    getSession: async () => cookieSession ?? (token === null ? null : fetchSession({ token })),
     checkMember,
   });
 };

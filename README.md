@@ -18,6 +18,7 @@ Trials only run inside the AGENTS category. Everything shown to users is in Fren
 
 - Bot: enable the **Message Content** privileged intent and invite the bot to the server.
 - OAuth2: add the redirect URLs `http://localhost:3000/api/auth/callback/discord` (local) and `https://tribunal.gaetanhus.fr/api/auth/callback/discord` (production).
+- Activity: enable Activities and set the `/` URL mapping to `tribunal.gaetanhus.fr`. This mapping also routes the login API and `/ws` through Discord's proxy. The Activity uses the Embedded App SDK for login and sends its session token to the room; it does not need third-party cookies.
 
 ## Run locally
 

@@ -7,10 +7,12 @@
     "build": "next build",
     "start": "next start",
     "ts:check": "tsc --noEmit",
+    "test": "node --import @swc-node/register/esm-register --test \"lib/**/*.test.ts\"",
     "db:migration:create": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
+    "@discord/embedded-app-sdk": "^2.5.0",
     "@react-three/drei": "10.7.9",
     "@react-three/fiber": "9.8.2",
     "@tribunal/bot": "workspace:*",
@@ -20,9 +22,11 @@
     "pg": "^8.23.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "three": "0.187.0"
+    "three": "0.187.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@swc-node/register": "1.12.1",
     "@types/node": "^26.6.6",
     "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",

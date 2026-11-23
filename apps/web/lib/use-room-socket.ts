@@ -10,7 +10,7 @@ export type Snapshot = Extract<ServerMessage, { type: "snapshot" }>;
 export type Speech = { speakerId: string | null; text: string; at: number };
 
 /** Live connection to the courtroom served by the bot */
-export const useRoomSocket = (url: string) => {
+export const useRoomSocket = (url: string, token?: string) => {
   const socketRef = useRef<WebSocket | null>(null);
   const [selfId, setSelfId] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
@@ -22,6 +22,10 @@ export const useRoomSocket = (url: string) => {
   useEffect(() => {
     const socket = new WebSocket(url);
     socketRef.current = socket;
+
+    const onOpen = () => {
+      if (token !== undefined) socket.send(JSON.stringify({ type: "auth", token } satisfies ClientMessage));
+    };
 
     // The verdict and vote result belong to one trial: cleared when a new trial is displayed.
     let lastTrialId: string | null = null;
@@ -45,6 +49,7 @@ export const useRoomSocket = (url: string) => {
     const onClose = () => {
       setRejected((current) => current ?? "Connexion perdue avec la salle d'audience.");
     };
+    socket.addEventListener("open", onOpen);
     socket.addEventListener("message", onMessage);
     socket.addEventListener("close", onClose);
 
@@ -55,11 +60,12 @@ export const useRoomSocket = (url: string) => {
 
     return () => {
       clearInterval(pruner);
+      socket.removeEventListener("open", onOpen);
       socket.removeEventListener("message", onMessage);
       socket.removeEventListener("close", onClose);
       socket.close();
     };
-  }, [url]);
+  }, [url, token]);
 
   const send = useCallback((message: ClientMessage) => {
     const socket = socketRef.current;
