@@ -21,4 +21,16 @@ const discordEvent = <K extends keyof ClientEvents>(
   });
 };
 
-export const trigger = { discordEvent };
+/** Wrap an async listener so one failure is logged and never crashes the process */
+const safeListener = <A extends unknown[]>(label: string, fn: (...args: A) => Promise<void>) => (...args: A): void => {
+  void (async () => {
+    try {
+      await fn(...args);
+    }
+    catch (error) {
+      logger.error(`${label} error:`, error instanceof Error ? error.stack : String(error));
+    }
+  })();
+};
+
+export const trigger = { discordEvent, safeListener };
