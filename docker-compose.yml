@@ -1,11 +1,12 @@
-# Production stack on the VPS: docker compose up -d --build
+# Production stack, deployed with Coolify (its proxy handles domains and HTTPS).
+# Domains are set per service in the Coolify UI: web on port 3000, bot on port 3001 under /ws.
 services:
   postgres:
     image: postgres:17
     restart: unless-stopped
     environment:
       POSTGRES_USER: tribunal
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
       POSTGRES_DB: tribunal
     volumes:
       - postgres-data:/var/lib/postgresql/data
@@ -15,9 +16,11 @@ services:
       context: .
       dockerfile: apps/bot/Dockerfile
     restart: unless-stopped
-    env_file: apps/bot/.env
     environment:
-      POSTGRESQL_URL: postgres://tribunal:${POSTGRES_PASSWORD}@postgres:5432/tribunal
+      POSTGRESQL_URL: postgres://tribunal:${POSTGRES_PASSWORD:?}@postgres:5432/tribunal
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:?}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?}
+      OPENROUTER_MODELS: ${OPENROUTER_MODELS:-}
       ROOM_PORT: "3001"
       WEB_INTERNAL_URL: http://web:3000
     depends_on:
@@ -28,30 +31,15 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
     restart: unless-stopped
-    env_file: apps/web/.env
     environment:
-      POSTGRESQL_URL: postgres://tribunal:${POSTGRES_PASSWORD}@postgres:5432/tribunal
+      POSTGRESQL_URL: postgres://tribunal:${POSTGRES_PASSWORD:?}@postgres:5432/tribunal
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?}
       BETTER_AUTH_URL: https://tribunal.gaetanhus.fr
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:?}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:?}
       ROOM_WS_URL: wss://tribunal.gaetanhus.fr/ws
     depends_on:
       - postgres
 
-  caddy:
-    image: caddy:2
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
-    depends_on:
-      - bot
-      - web
-
 volumes:
   postgres-data:
-  caddy-data:
-  caddy-config:

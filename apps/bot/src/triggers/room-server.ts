@@ -209,7 +209,8 @@ trigger.safeListener("Room known members refresh", refreshKnownMembers)();
 const server = createServer((_request, response) => {
   response.writeHead(404).end();
 });
-const webSocketServer = new WebSocketServer({ server, path: "/ws", maxPayload: MAX_PAYLOAD_BYTES });
+// Any path is accepted: the proxy may forward "/ws" as is or strip it, and this server only serves the room.
+const webSocketServer = new WebSocketServer({ server, maxPayload: MAX_PAYLOAD_BYTES });
 webSocketServer.on("connection", trigger.safeListener("Room connection", onConnection));
 server.listen(env.ROOM_PORT, () => {
   logger.info(`Room WebSocket server listening on port ${String(env.ROOM_PORT)}`);

@@ -37,11 +37,17 @@ Checks: `pnpm run ts:check`, `pnpm run lint:fix`, `pnpm run test`.
 
 ## Deploy on the VPS
 
-1. DNS: an `A` record (and `AAAA` for IPv6) `tribunal.gaetanhus.fr` pointing to the VPS. Caddy gets the HTTPS certificate by itself.
-2. Copy `.env.example` to `.env` (Postgres password), and fill `apps/bot/.env` and `apps/web/.env`. Database URLs, `BETTER_AUTH_URL` and `ROOM_WS_URL` are set by `docker-compose.yml`.
-3. `docker compose up -d --build`
+Deployed with [Coolify](https://coolify.io), whose proxy handles domains and HTTPS.
 
-Caddy serves the website and routes `/ws` to the bot, on the same domain.
+1. DNS: an `A` record (and `AAAA` for IPv6) `tribunal.gaetanhus.fr` pointing to the VPS.
+2. Coolify: new resource from this repository, Docker Compose build pack, branch `stable`, file `docker-compose.yml`.
+3. Domains, per service:
+   - `web`: `https://tribunal.gaetanhus.fr:3000`
+   - `bot`: `https://tribunal.gaetanhus.fr/ws:3001` (domain with the `/ws` path, internal port 3001)
+4. Environment variables (Coolify asks for each required one): `POSTGRES_PASSWORD`, `DISCORD_BOT_TOKEN`, `OPENROUTER_API_KEY`, `OPENROUTER_MODELS` (optional), `BETTER_AUTH_SECRET`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`.
+5. Deploy.
+
+The website and the courtroom WebSocket share the same domain, so the login cookie reaches the bot.
 
 ## Credits
 

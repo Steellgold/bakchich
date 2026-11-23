@@ -1,8 +1,0 @@
-tribunal.gaetanhus.fr {
-	handle /ws* {
-		reverse_proxy bot:3001
-	}
-	handle {
-		reverse_proxy web:3000
-	}
-}
