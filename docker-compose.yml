@@ -27,6 +27,7 @@ services:
       OPENROUTER_MODELS: ${OPENROUTER_MODELS:-}
       DISCORD_VOICE_CATEGORY_ID: ${DISCORD_VOICE_CATEGORY_ID:-1572558769139752960}
       PIPER_URL: http://tts:5000
+      PIPER_SPEAKER: ${PIPER_SPEAKER-8582}
       ROOM_PORT: "3001"
       WEB_INTERNAL_URL: http://web:3000
     depends_on:
@@ -37,6 +38,8 @@ services:
     build:
       context: .
       dockerfile: docker/piper.Dockerfile
+      args:
+        PIPER_VOICE: ${PIPER_VOICE:-fr_FR-mls-medium}
     restart: unless-stopped
     expose:
       - "5000"

@@ -4,7 +4,7 @@ import { court } from "#/court/court";
 import { AI_LAWYER, formatNames } from "#/court/engine";
 import { fetchUnfinishedHearings, setHearingLawyer, setHearingStatus } from "#/court/hearings";
 import { upsertMember } from "#/court/members";
-import { createPreparationRoom, deleteHearingChannel, discordClient, fetchDiscordSendableChannel, findDiscordGuildMember, ROYAUME_GUILD_ID, sendSafeMessage, setHearingEventStatus } from "#/integrations/discord";
+import { createPreparationRoom, deleteHearingChannel, discordClient, fetchDiscordSendableChannel, findDiscordGuildMember, sendSafeMessage, setHearingEventStatus } from "#/integrations/discord";
 import { speak } from "#/integrations/piper";
 import { leaveVoice, playInVoice, watchSpeakers } from "#/integrations/voice";
 import { attempt } from "#/utils/attempt";
@@ -38,11 +38,16 @@ export const setPendingLawyer = async (channelId: string, lawyer: Member, hearin
   return true;
 };
 
-const fetchGuild = async () => discordClient.guilds.fetch(ROYAUME_GUILD_ID);
+/** Guild of a channel (the text channel of a hearing, or its voice channel): hearings may run on several servers */
+const guildOf = async (channelId: string) => {
+  const channel = await discordClient.channels.fetch(channelId);
+  if (channel === null || channel.isDMBased()) throw new Error(`Channel ${channelId} is not in a guild`);
+  return channel.guild;
+};
 
 /** Close the event and remove the voice channel of a hearing (only ever channels the bot created) */
 const dismantle = async (hearing: Hearing, eventStatus: "canceled" | "completed") => {
-  const guild = await fetchGuild();
+  const guild = await guildOf(hearing.channelId);
   if (hearing.eventId !== null) await setHearingEventStatus(guild, hearing.eventId, eventStatus);
   if (hearing.voiceChannelId !== null) {
     leaveVoice(guild.id, hearing.voiceChannelId);
@@ -57,12 +62,12 @@ const cancelHearing = async (hearing: Hearing, text: string) => {
 };
 
 const watch = trigger.safeListener("Voice speakers", async (voiceChannelId: string) => {
-  await watchSpeakers(await fetchGuild(), voiceChannelId);
+  await watchSpeakers(await guildOf(voiceChannelId), voiceChannelId);
 });
 
 /** Open the trial itself once the defense is ready */
 const openTrial = async (hearing: Hearing, accused: Member[], context: string[]) => {
-  const guild = await fetchGuild();
+  const guild = await guildOf(hearing.channelId);
   const trial = court.open({
     channelId: hearing.channelId,
     accused,
@@ -95,7 +100,7 @@ const finishPreparation = trigger.safeListener("Hearing preparation end", async 
 
   preparing.delete(channelId);
   clearTimeout(entry.timer);
-  await deleteHearingChannel(await fetchGuild(), entry.roomId);
+  await deleteHearingChannel(await guildOf(channelId), entry.roomId);
   await openTrial(entry.hearing, entry.accused, entry.context);
 });
 
@@ -152,7 +157,7 @@ const prepareDefense = async (hearing: Hearing, accused: Member[], lawyer: Membe
 const startHearing = async (hearing: Hearing) => {
   pending.delete(hearing.channelId);
 
-  const guild = await fetchGuild();
+  const guild = await guildOf(hearing.channelId);
   const found = await Promise.all(hearing.accused.map(async (accused) => ({ accused, member: await findDiscordGuildMember(guild, accused.id, { force: true }) })));
   const present = found.flatMap(({ member }) => (member === null ? [] : [member]));
 
@@ -213,7 +218,7 @@ export const forceStartHearing = (channelId: string, requesterId: string): Force
 const removeChannel = trigger.safeListener("Hearing channel removal", async (hearing: Hearing) => {
   if (hearing.voiceChannelId === null) return;
 
-  const guild = await fetchGuild();
+  const guild = await guildOf(hearing.channelId);
   leaveVoice(guild.id, hearing.voiceChannelId);
   await deleteHearingChannel(guild, hearing.voiceChannelId);
 });
@@ -224,14 +229,16 @@ export const voiceChannelOf = (channelId: string): string | null => running.get(
 /** Whether a member is in the voice channel of the trial of a text channel (always true when the trial has none) */
 export const isInHearingVoice = (channelId: string, userId: string): boolean => {
   const voiceChannelId = voiceChannelOf(channelId);
-  return voiceChannelId === null || discordClient.guilds.cache.get(ROYAUME_GUILD_ID)?.voiceStates.cache.get(userId)?.channelId === voiceChannelId;
+  if (voiceChannelId === null) return true;
+  const channel = discordClient.channels.cache.get(voiceChannelId);
+  return channel?.isVoiceBased() === true && channel.members.has(userId);
 };
 
 // Speeches follow each other in the voice channel instead of talking over one another:
 let speaking: Promise<void> = Promise.resolve();
 
 const sayNow = async (voiceChannelId: string, text: string, speakerId: string) => {
-  const result = await attempt(async () => playInVoice(await fetchGuild(), voiceChannelId, await speak(text), speakerId));
+  const result = await attempt(async () => playInVoice(await guildOf(voiceChannelId), voiceChannelId, await speak(text), speakerId));
   if (!result.ok) logger.error("Judge voice error:", result.error instanceof Error ? result.error.stack : String(result.error));
 };
 
@@ -253,7 +260,7 @@ export const completeHearing = async (channelId: string): Promise<void> => {
   if (hearing === undefined) return;
 
   await setHearingStatus(hearing.id, "finished");
-  if (hearing.eventId !== null) await setHearingEventStatus(await fetchGuild(), hearing.eventId, "completed");
+  if (hearing.eventId !== null) await setHearingEventStatus(await guildOf(hearing.channelId), hearing.eventId, "completed");
   setTimeout(() => {
     removeChannel(hearing);
   }, CHANNEL_DELETE_DELAY_MS);

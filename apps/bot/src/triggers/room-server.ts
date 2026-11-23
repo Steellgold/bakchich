@@ -7,11 +7,11 @@ import type { RawData } from "ws";
 import { court } from "#/court/court";
 import { formatVerdictLine } from "#/court/judge";
 import { listKnownMembers, upsertMember } from "#/court/members";
-import { AGENTS_CATEGORY_ID, discordClient, findDiscordGuildMember, ROYAUME_GUILD_ID } from "#/integrations/discord";
+import { AGENTS_CATEGORY_IDS, discordClient, findDiscordGuildMember, GUILD_IDS } from "#/integrations/discord";
 import { fetchSession } from "#/integrations/session";
 import { speakingIds } from "#/integrations/voice";
 import { authorizeConnection } from "#/room/access";
-import { SEATS, TICK_MS } from "#/room/layout";
+import { MAX_SPEED, SEATS, TICK_MS } from "#/room/layout";
 import { parseClientMessage } from "#/room/protocol";
 import { pickDisplayedTrial, World } from "#/room/world";
 import { isInHearingVoice } from "#/triggers/hearings";
@@ -24,8 +24,11 @@ import { createServer } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
 
 const AUTH_TIMEOUT_MS = 5_000;
-/** Longest move accepted at once, so a step can never jump through a rail */
-const MAX_MOVE_ELAPSED_MS = 200;
+/**
+ * Distance a member may walk refills at MAX_SPEED and is spent by their moves. Moves bunched by network jitter
+ * still catch up with the client, while the average speed stays capped; the cap keeps a burst after a lag spike short.
+ */
+const MAX_MOVE_BUDGET = MAX_SPEED * 0.5;
 const KNOWN_MEMBERS_REFRESH_MS = 60_000;
 const KNOWN_MEMBERS_LIMIT = 100;
 /** Client messages are tiny JSON intents */
@@ -34,7 +37,7 @@ const ROOM_UNAVAILABLE = "Salle indisponible, réessaie plus tard.";
 
 const world = new World();
 const sockets = new Map<string, WebSocket>();
-const lastMoveAt = new Map<string, number>();
+const moveBudgets = new Map<string, { distance: number; at: number }>();
 let displayed: Trial | null = null;
 let knownMembers: KnownMember[] = [];
 
@@ -52,18 +55,20 @@ const rawText = (raw: RawData): string => {
   return raw.toString("utf8");
 };
 
+/** The member in the first allowed guild where they see an AGENTS category, else in the first one they belong to; null when in none */
 const checkMember = async (discordId: string) => {
-  const guild = await discordClient.guilds.fetch(ROYAUME_GUILD_ID);
-  // Forced fetch: without the GuildMembers intent the cache never learns about kicks or role changes.
-  const member = await findDiscordGuildMember(guild, discordId, { force: true });
-  if (member === null) return null;
+  let found: { name: string; avatarUrl: string; canViewAgents: boolean } | null = null;
+  for (const guildId of GUILD_IDS) {
+    const guild = await discordClient.guilds.fetch(guildId);
+    // Forced fetch: without the GuildMembers intent the cache never learns about kicks or role changes.
+    const member = await findDiscordGuildMember(guild, discordId, { force: true });
+    if (member === null) continue;
 
-  const category = await guild.channels.fetch(AGENTS_CATEGORY_ID);
-  return {
-    name: member.displayName,
-    avatarUrl: member.displayAvatarURL({ extension: "png", size: 128 }),
-    canViewAgents: category?.permissionsFor(member).has(PermissionFlagsBits.ViewChannel) === true,
-  };
+    const canViewAgents = AGENTS_CATEGORY_IDS.some((id) => guild.channels.cache.get(id)?.permissionsFor(member).has(PermissionFlagsBits.ViewChannel) === true);
+    found ??= { name: member.displayName, avatarUrl: member.displayAvatarURL({ extension: "png", size: 128 }), canViewAgents };
+    if (canViewAgents) return { ...found, canViewAgents };
+  }
+  return found;
 };
 
 // Start listening before checking cookies: an Activity sends its token as soon as the socket opens.
@@ -119,9 +124,10 @@ const handleMessage = (member: RoomMember, socket: WebSocket, raw: string) => {
 
   if (message.type === "move") {
     const now = Date.now();
-    const elapsed = Math.min(now - (lastMoveAt.get(member.id) ?? now - TICK_MS), MAX_MOVE_ELAPSED_MS);
-    lastMoveAt.set(member.id, now);
-    world.move(member.id, { x: message.x, z: message.z }, message.rotation, elapsed);
+    const previous = moveBudgets.get(member.id) ?? { distance: MAX_SPEED * TICK_MS / 1_000, at: now };
+    const budget = Math.min(previous.distance + MAX_SPEED * (now - previous.at) / 1_000, MAX_MOVE_BUDGET);
+    const walked = world.move(member.id, { x: message.x, z: message.z }, message.rotation, budget);
+    moveBudgets.set(member.id, { distance: budget - walked, at: now });
     return;
   }
   if (message.type === "become-juror") {
@@ -203,7 +209,7 @@ const onConnection = async (socket: WebSocket, request: IncomingMessage) => {
     // A replaced connection must not remove its successor:
     if (sockets.get(member.id) !== socket) return;
     sockets.delete(member.id);
-    lastMoveAt.delete(member.id);
+    moveBudgets.delete(member.id);
     world.leave(member.id);
   });
 

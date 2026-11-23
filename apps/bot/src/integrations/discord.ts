@@ -5,11 +5,14 @@ import { ActivityType, ChannelType, Client, DiscordAPIError, GatewayIntentBits, 
 
 export const DISCORD_MAX_MESSAGE_LENGTH = 2000;
 
-/** Discord category where the bot may act freely (see AGENTS.md rules), the Royaume one unless configured for a test server */
-export const AGENTS_CATEGORY_ID = env.DISCORD_AGENTS_CATEGORY_ID;
+/** Discord categories where the bot may act freely (see AGENTS.md rules), the Royaume one unless configured otherwise */
+export const AGENTS_CATEGORY_IDS = env.DISCORD_AGENTS_CATEGORY_ID;
 
-/** The guild allowed in the courtroom: « Le Royaume » unless configured for a test server */
-export const ROYAUME_GUILD_ID = env.DISCORD_GUILD_ID;
+/** The guilds allowed in the courtroom: « Le Royaume » unless configured otherwise */
+export const GUILD_IDS = env.DISCORD_GUILD_ID;
+
+/** The configured audio category that belongs to this guild, null when it has none */
+const voiceCategoryOf = (guild: Guild): string | null => env.DISCORD_VOICE_CATEGORY_ID.find((id) => guild.channels.cache.has(id)) ?? null;
 
 // Neutralizes mass-ping mentions into inert text so the bot can never ping everyone in a guild channel (low-level helper shared by the send tools):
 export const sanitizeDiscordMessage = (text: string): string => text.replace(/@(everyone|here)/giu, "@{$1}").slice(0, DISCORD_MAX_MESSAGE_LENGTH);
@@ -103,15 +106,16 @@ const createHearingEvent = async (guild: Guild, channelId: string, input: { name
   }
 };
 
-/** Voice channel and event of a hearing, created in the audio category. Null when no category is set or the channel cannot be created: the hearing then opens at once without them. */
+/** Voice channel and event of a hearing, created in the guild's audio category. Null when the guild has no category or the channel cannot be created: the hearing then opens at once without them. */
 export const createHearingRoom = async (guild: Guild, input: { name: string; description: string; startsAt: Date }): Promise<{ channelId: string; eventId: string | null; eventUrl: string | null } | null> => {
-  if (env.DISCORD_VOICE_CATEGORY_ID === "") return null;
+  const parent = voiceCategoryOf(guild);
+  if (parent === null) return null;
 
   try {
     const channel = await guild.channels.create({
       name: sanitizeDiscordMessage(input.name).slice(0, 100),
       type: ChannelType.GuildVoice,
-      parent: env.DISCORD_VOICE_CATEGORY_ID,
+      parent,
       reason: "Tribunal hearing",
     });
     const event = await createHearingEvent(guild, channel.id, input);
@@ -125,13 +129,14 @@ export const createHearingRoom = async (guild: Guild, input: { name: string; des
 
 /** Private-style voice room where the accused prepare their defense, limited to them and their lawyer. Null without audio category or when Discord refuses. */
 export const createPreparationRoom = async (guild: Guild, input: { name: string; places: number }): Promise<string | null> => {
-  if (env.DISCORD_VOICE_CATEGORY_ID === "") return null;
+  const parent = voiceCategoryOf(guild);
+  if (parent === null) return null;
 
   try {
     const channel = await guild.channels.create({
       name: sanitizeDiscordMessage(input.name).slice(0, 100),
       type: ChannelType.GuildVoice,
-      parent: env.DISCORD_VOICE_CATEGORY_ID,
+      parent,
       userLimit: input.places,
       reason: "Tribunal defense preparation",
     });

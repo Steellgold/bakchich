@@ -1,6 +1,6 @@
 import type { Trial } from "../court/engine";
 import type { Seat, Vec2 } from "./layout";
-import { GATE, GATE_RADIUS, MAX_SPEED, OBSTACLES, PLAYER_RADIUS, RESTRICTED_ZONE, ROOM, SEATS, WELL } from "./layout";
+import { GATE, GATE_RADIUS, OBSTACLES, PLAYER_RADIUS, RESTRICTED_ZONE, ROOM, SEATS, WELL } from "./layout";
 
 export type Role = "accused" | "prosecutor" | "defense" | "witness";
 
@@ -55,6 +55,18 @@ const collides = (point: Vec2) => OBSTACLES.some((box) => point.x > box.min.x - 
 export const canStand = (point: Vec2, access: Access): boolean => insideRoom(point) && !collides(point)
   && (access === "counsel" || (!inWell(point) && (access === "party" || !inRestrictedZone(point))));
 
+/** Step towards `to`, sliding along a wall on one axis when the straight step is blocked; stays at `from` when both are, shared with the client */
+export const slide = (from: Vec2, to: Vec2, access: Access): Vec2 => {
+  if (canStand(to, access)) return to;
+  const alongX = { x: to.x, z: from.z };
+  if (canStand(alongX, access)) return alongX;
+  const alongZ = { x: from.x, z: to.z };
+  return canStand(alongZ, access) ? alongZ : from;
+};
+
+/** Longest single step checked by the server: shorter than the thinnest obstacle widened by the player radius, so a move can never cross a rail */
+const MAX_STEP = 0.25;
+
 /** Counsel (the prosecutor, the defense lawyer, or the accused defending themselves) walks in the well only while a witness is on the stand */
 export const accessFor = (role: Role | null, trial: { lawyer: unknown; witness: unknown } | null): Access => {
   if (role === null) return "public";
@@ -97,21 +109,32 @@ export class World {
     this.states.delete(id);
   }
 
-  /** Move towards a target, clamped to the max speed, refused through obstacles or into a forbidden zone */
-  public move(id: string, target: Vec2, rotation: number, elapsedMs: number): void {
+  /**
+   * Walk towards a target within a distance budget, in short steps that slide along obstacles and never enter a forbidden zone.
+   * Returns the distance walked, so the caller can spend it from the member's budget.
+   */
+  public move(id: string, target: Vec2, rotation: number, maxDistance: number): number {
     const state = this.states.get(id);
-    if (state?.seatId !== null) return;
+    if (state?.seatId !== null) return 0;
 
     state.rotation = rotation;
+    const access = accessFor(state.role, this.trial);
+    let walked = 0;
 
-    const dx = target.x - state.position.x;
-    const dz = target.z - state.position.z;
-    const length = Math.hypot(dx, dz);
-    const maxLength = MAX_SPEED * elapsedMs / 1000;
-    const scale = length > maxLength ? maxLength / length : 1;
-    const next = { x: state.position.x + dx * scale, z: state.position.z + dz * scale };
+    while (walked < maxDistance) {
+      const dx = target.x - state.position.x;
+      const dz = target.z - state.position.z;
+      const left = Math.hypot(dx, dz);
+      if (left < 1e-6) break;
+      const step = Math.min(MAX_STEP, left, maxDistance - walked);
+      const next = slide(state.position, { x: state.position.x + (dx / left) * step, z: state.position.z + (dz / left) * step }, access);
+      const moved = Math.hypot(next.x - state.position.x, next.z - state.position.z);
+      if (moved < 1e-6) break;
+      state.position = next;
+      walked += moved;
+    }
 
-    if (canStand(next, accessFor(state.role, this.trial))) state.position = next;
+    return walked;
   }
 
   public becomeJuror(id: string): "seated" | "too-far" | "full" {

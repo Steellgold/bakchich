@@ -7,7 +7,7 @@ import { countActiveMembers, hearingDelayMs } from "#/court/hearing";
 import { saveHearing } from "#/court/hearings";
 import { upsertMember } from "#/court/members";
 import { fetchRecord } from "#/court/record";
-import { AGENTS_CATEGORY_ID, conversation, createHearingRoom, discordClient, fetchRecentHumanMessages, findDiscordGuildMember, getCategoryId, sanitizeDiscordMessage, startDiscordTyping } from "#/integrations/discord";
+import { AGENTS_CATEGORY_IDS, conversation, createHearingRoom, discordClient, fetchRecentHumanMessages, findDiscordGuildMember, getCategoryId, sanitizeDiscordMessage, startDiscordTyping } from "#/integrations/discord";
 import { collectContext, forceStartAnswers, forceStartHearing, hasPendingHearing, judgeSays, scheduleHearing } from "#/triggers/hearings";
 import { logger } from "#/utils/logger";
 import { trigger } from "#/utils/trigger";
@@ -183,7 +183,7 @@ trigger.discordEvent("messageCreate", async (message) => {
   const mentioned = message.mentions.has(botUser, { ignoreEveryone: true, ignoreRoles: true, ignoreRepliedUser: true });
 
   // Outside the AGENTS category, the bot only answers explicit mentions:
-  if (getCategoryId(message.channel) !== AGENTS_CATEGORY_ID) {
+  if (!AGENTS_CATEGORY_IDS.includes(getCategoryId(message.channel) ?? "")) {
     if (mentioned) await reply(message, `${EMOJI.courthouse} Le Tribunal ne siège que dans la catégorie AGENTS.`);
     return;
   }

@@ -35,13 +35,14 @@ const voteButtons = (trialId: string, disabled: boolean) => [
   ),
 ];
 
-/** The court-appointed AI lawyer pleads in the text channel, in the courtroom and out loud */
-const aiDefends = async (trial: Trial, stage: "opening" | "closing") => {
-  const channel = await fetchDiscordSendableChannel(trial.channelId);
-  const stopTyping = startDiscordTyping(channel, () => logger.warn("Could not send the typing indicator"));
-  const text = await judge.defense(trial, defenseContextOf(trial.channelId), stage).finally(stopTyping);
+/** Spoken lines are only written in the text channel when the trial has no voice channel to hear them in */
+const isHeardOutLoud = (trial: Trial) => voiceChannelOf(trial.channelId) !== null;
 
-  await sendSafeMessage(channel, `${EMOJI.unbalancedScales} **${AI_LAWYER.name}** : ${text}`, []);
+/** The court-appointed AI lawyer pleads in the courtroom and out loud, in the text channel only without voice channel */
+const aiDefends = async (trial: Trial, stage: "opening" | "closing") => {
+  const text = await judge.defense(trial, defenseContextOf(trial.channelId), stage);
+
+  if (!isHeardOutLoud(trial)) await sendSafeMessage(await fetchDiscordSendableChannel(trial.channelId), `${EMOJI.unbalancedScales} **${AI_LAWYER.name}** : ${text}`, []);
   court.say(trial.channelId, AI_LAWYER.id, text);
   judgeSays(trial.channelId, text, AI_LAWYER.id);
 };
@@ -59,7 +60,8 @@ const handleEvent = async (event: CourtEvent) => {
   if (event.type === "opened") {
     const stopTyping = startDiscordTyping(channel, () => logger.warn("Could not send the typing indicator"));
     const text = await judge.opening(trial).finally(stopTyping);
-    await sendSafeMessage(channel, `${EMOJI.gavel} ${text}`, involvedIds(trial));
+    // Heard out loud: a short notice still pings the parties.
+    await sendSafeMessage(channel, `${EMOJI.gavel} ${isHeardOutLoud(trial) ? `L'audience est ouverte dans <#${voiceChannelOf(trial.channelId) ?? ""}>.` : text}`, involvedIds(trial));
     court.say(trial.channelId, null, text);
     judgeSays(trial.channelId, text);
 
@@ -96,7 +98,9 @@ const handleEvent = async (event: CourtEvent) => {
   const stopTyping = startDiscordTyping(channel, () => logger.warn("Could not send the typing indicator"));
   const text = await judge.verdict(trial, event.verdict, sentence).finally(stopTyping);
 
-  await sendSafeMessage(channel, `${text}\n\n${verdictEmojis(event.verdict)} ${formatVerdictLine(event.verdict, sentence)}`, involvedIds(trial));
+  // The official verdict line is always written; the judge's speech only without voice channel.
+  const verdictLine = `${verdictEmojis(event.verdict)} ${formatVerdictLine(event.verdict, sentence)}`;
+  await sendSafeMessage(channel, isHeardOutLoud(trial) ? verdictLine : `${text}\n\n${verdictLine}`, involvedIds(trial));
   judgeSays(trial.channelId, `${text} ${formatVerdictLine(event.verdict, sentence)}`);
   await attempt(async () => completeHearing(trial.channelId));
   logger.info(`Trial ${trial.id} closed: ${event.verdict.guilty ? "guilty" : "not guilty"}${event.verdict.reversed ? " (reversed)" : ""}`);

@@ -2,7 +2,8 @@
 
 import type { ThreeElements } from "@react-three/fiber";
 import type { Vec2 } from "@tribunal/bot/room/layout";
-import type { BufferGeometry, Group, Texture } from "three";
+import type { RefObject } from "react";
+import type { BufferGeometry, Group, Mesh, Texture } from "three";
 import { INK } from "./courtroom";
 import { Html, Outlines } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
@@ -314,7 +315,7 @@ const Wig = ({ color }: { color: string }) => (
 );
 
 /** The face, hair and facial hair, in head space (origin at the centre of the head) */
-const Head = ({ look }: { look: Look }) => {
+const Head = ({ look, mouthRef, browsRef }: { look: Look; mouthRef: RefObject<Mesh | null>; browsRef: RefObject<Group | null> }) => {
   const judge = look.outfit === "judge";
   const style = hairStyles[look.hairStyle];
   const hw = look.headWidth;
@@ -343,14 +344,6 @@ const Head = ({ look }: { look: Look }) => {
               <boxGeometry args={[0.105, 0.04, 0.04]} />
             </Toon>
           )}
-          <Flat
-            color={judge ? JUDGE_BROWS : look.hair}
-            position={[side * 0.11, judge ? 0.12 + (side === 1 ? 0.025 : 0) : 0.105, 0.238]}
-            // The judge raises one brow and frowns with the other:
-            rotation-z={judge ? (side === 1 ? -0.18 : 0.3) : side * look.browTilt}
-          >
-            <boxGeometry args={[judge ? 0.12 : 0.08, 0.019 * look.brow, 0.026]} />
-          </Flat>
           {look.glasses && (
             <Flat color={INK} position={[side * 0.105, 0.025, 0.272]}>
               <torusGeometry args={[0.056, 0.01, 4, 14]} />
@@ -358,6 +351,25 @@ const Head = ({ look }: { look: Look }) => {
           )}
         </group>
       ))}
+      {/* Both brows lift together while talking */}
+      <group ref={browsRef}>
+        {[-1, 1].map((side) => (
+          <Flat
+            key={side}
+            color={judge ? JUDGE_BROWS : look.hair}
+            position={[side * 0.11, judge ? 0.12 + (side === 1 ? 0.025 : 0) : 0.105, 0.238]}
+            // The judge raises one brow and frowns with the other:
+            rotation-z={judge ? (side === 1 ? -0.18 : 0.3) : side * look.browTilt}
+          >
+            <boxGeometry args={[judge ? 0.12 : 0.08, 0.019 * look.brow, 0.026]} />
+          </Flat>
+        ))}
+      </group>
+      {/* Open mouth, scaled every frame from the speaking rhythm (flat when silent) */}
+      <mesh ref={mouthRef} position={[0, -0.122, 0.252]} scale={[0.045, 0.001, 0.02]} visible={false}>
+        <sphereGeometry args={[1, 10, 6]} />
+        <meshBasicMaterial color="#5a1f2e" />
+      </mesh>
       {look.glasses && (
         <Flat color={INK} position={[0, 0.035, 0.28]}>
           <boxGeometry args={[0.06, 0.012, 0.012]} />
@@ -447,7 +459,12 @@ export const Character = ({ id, name, avatarUrl, position, rotation, seated, onB
   const rightArmRef = useRef<Group>(null);
   const leftLegRef = useRef<Group>(null);
   const rightLegRef = useRef<Group>(null);
-  const motionRef = useRef({ lastTarget: { x: position.x, z: position.z }, velocity: { x: 0, z: 0 }, changedAt: 0, phase: 0, walk: 0 });
+  const leftWristRef = useRef<Group>(null);
+  const rightWristRef = useRef<Group>(null);
+  const headRef = useRef<Group>(null);
+  const mouthRef = useRef<Mesh>(null);
+  const browsRef = useRef<Group>(null);
+  const motionRef = useRef({ lastTarget: { x: position.x, z: position.z }, velocity: { x: 0, z: 0 }, changedAt: 0, phase: 0, walk: 0, talk: 0, wasSpeaking: false, gesture: id.length, gestureAt: 0 });
   const texture = useAvatarTexture(avatarUrl);
   const look = useMemo(() => (wig ? JUDGE_LOOK : memberLook(id)), [id, wig]);
   const height = seated ? 0.45 : 0.9;
@@ -500,15 +517,46 @@ export const Character = ({ id, name, avatarUrl, position, rotation, seated, onB
       if (leg !== null) leg.rotation.x = Math.sin(motion.phase + index * Math.PI) * 0.75 * motion.walk;
     }
 
-    const gesture = speaking ? pack[Math.floor(time / GESTURE_SECONDS + id.length) % pack.length] : undefined;
+    // Talking: only the speaking state is known (no audio), so a syllable-like rhythm drives the mouth, head, brows and hands.
+    motion.talk += ((speaking ? 1 : 0) - motion.talk) * (1 - Math.exp(-delta * 8));
+    const talk = motion.talk;
+    const syllable = Math.abs(Math.sin(time * 13 + id.length) * Math.sin(time * 5.7 + 1.3));
+    // A new gesture for each phrase (each time the member starts talking again), and every few seconds of a long one:
+    if (speaking && (!motion.wasSpeaking || time - motion.gestureAt > GESTURE_SECONDS)) {
+      motion.gesture += 1 + Math.floor(Math.random() * Math.max(pack.length - 1, 1));
+      motion.gestureAt = time;
+    }
+    motion.wasSpeaking = speaking;
+
+    const mouth = mouthRef.current;
+    if (mouth !== null) {
+      const open = talk * (0.25 + 0.75 * syllable);
+      mouth.visible = open > 0.03;
+      mouth.scale.y = 0.001 + open * 0.042;
+    }
+    if (headRef.current !== null) {
+      headRef.current.rotation.x = (Math.sin(time * 4.2) * 0.05 - syllable * 0.03) * talk;
+      headRef.current.rotation.y = Math.sin(time * 1.3 + id.length) * 0.1 * talk;
+      headRef.current.rotation.z = Math.sin(time * 2.1) * 0.04 * talk;
+    }
+    if (browsRef.current !== null) browsRef.current.position.y = Math.max(0, Math.sin(time * 2.6)) * 0.014 * talk;
+
+    const gesture = speaking ? pack[motion.gesture % pack.length] : undefined;
     for (const [index, arm] of [leftArmRef.current, rightArmRef.current].entries()) {
       if (arm === null) continue;
       const side = index === 0 ? -1 : 1;
       const pose = gesture === undefined ? { ...IDLE, x: restX } : (index === 0 ? gesture.left : gesture.right);
       const wobble = pose.wobble ?? 0;
       const swing = gesture === undefined ? Math.sin(motion.phase + (index === 0 ? Math.PI : 0)) * 0.6 * motion.walk : 0;
-      arm.rotation.x += (pose.x + swing + Math.sin(time * 5 + index) * wobble - arm.rotation.x) * 0.15;
+      // Raised arms beat a little with the syllables:
+      const beat = pose.x < -0.3 ? syllable * 0.18 * talk : 0;
+      arm.rotation.x += (pose.x + swing - beat + Math.sin(time * 5 + index) * wobble - arm.rotation.x) * 0.15;
       arm.rotation.z += (side * (pose.outward + Math.cos(time * 4 + index) * wobble * 0.5) - arm.rotation.z) * 0.15;
+    }
+    for (const [index, wrist] of [leftWristRef.current, rightWristRef.current].entries()) {
+      if (wrist === null) continue;
+      wrist.rotation.x = Math.sin(time * 6 + index * 1.7) * 0.45 * talk;
+      wrist.rotation.z = Math.cos(time * 4.5 + index) * 0.3 * talk;
     }
   });
 
@@ -690,24 +738,30 @@ export const Character = ({ id, name, avatarUrl, position, rotation, seated, onB
           <Toon color={cuff} position={[0, -armLength + 0.01, 0]}>
             <cylinderGeometry onUpdate={facetGeometry} args={[(robed ? 0.13 : 0.098) * armWidth, (robed ? 0.13 : 0.098) * armWidth, 0.05, 6]} />
           </Toon>
-          <Toon color={look.skin} outlined position={[0, -armLength - 0.06, 0]}>
-            <icosahedronGeometry onUpdate={facetGeometry} args={[0.085, 1]} />
-          </Toon>
-          {look.outfit === "judge" && side === 1 && (
-            <group position={[0, -armLength - 0.06, 0]}>
-              <Toon color="#8a4b2e" outlined position={[0, 0, 0.15]} rotation-x={Math.PI / 2}>
-                <cylinderGeometry onUpdate={facetGeometry} args={[0.025, 0.03, 0.34, 6]} />
-              </Toon>
-              <Toon color="#b8632f" outlined position={[0, 0, 0.33]} rotation-z={Math.PI / 2}>
-                <cylinderGeometry onUpdate={facetGeometry} args={[0.075, 0.075, 0.24, 8]} />
-              </Toon>
-              {[-1, 1].map((end) => (
-                <Toon key={end} color={look.accent} position={[end * 0.085, 0, 0.33]} rotation-z={Math.PI / 2}>
-                  <cylinderGeometry onUpdate={facetGeometry} args={[0.08, 0.08, 0.04, 8]} />
+          {/* Hand on a wrist that turns while talking: flat palm and a thumb towards the front */}
+          <group ref={side === -1 ? leftWristRef : rightWristRef} position={[0, -armLength - 0.02, 0]}>
+            <Toon color={look.skin} outlined position={[0, -0.05, 0]} scale={[0.85, 1.15, 0.62]}>
+              <icosahedronGeometry onUpdate={facetGeometry} args={[0.085, 1]} />
+            </Toon>
+            <Toon color={look.skin} outlined position={[-side * 0.035, -0.035, 0.05]} rotation-x={-0.5} scale={[0.8, 1.3, 0.8]}>
+              <icosahedronGeometry onUpdate={facetGeometry} args={[0.032, 0]} />
+            </Toon>
+            {look.outfit === "judge" && side === 1 && (
+              <group position={[0, -0.04, 0]}>
+                <Toon color="#8a4b2e" outlined position={[0, 0, 0.15]} rotation-x={Math.PI / 2}>
+                  <cylinderGeometry onUpdate={facetGeometry} args={[0.025, 0.03, 0.34, 6]} />
                 </Toon>
-              ))}
-            </group>
-          )}
+                <Toon color="#b8632f" outlined position={[0, 0, 0.33]} rotation-z={Math.PI / 2}>
+                  <cylinderGeometry onUpdate={facetGeometry} args={[0.075, 0.075, 0.24, 8]} />
+                </Toon>
+                {[-1, 1].map((end) => (
+                  <Toon key={end} color={look.accent} position={[end * 0.085, 0, 0.33]} rotation-z={Math.PI / 2}>
+                    <cylinderGeometry onUpdate={facetGeometry} args={[0.08, 0.08, 0.04, 8]} />
+                  </Toon>
+                ))}
+              </group>
+            )}
+          </group>
         </group>
       ))}
 
@@ -726,8 +780,8 @@ export const Character = ({ id, name, avatarUrl, position, rotation, seated, onB
         </Toon>
       )}
 
-      <group position={[0, headY, 0]}>
-        <Head look={look} />
+      <group ref={headRef} position={[0, headY, 0]}>
+        <Head look={look} mouthRef={mouthRef} browsRef={browsRef} />
       </group>
 
       <Html position={[0, height + 1.5, 0]} center distanceFactor={10}>

@@ -7,7 +7,7 @@ import { Character } from "./character";
 import { isBenchSeat } from "./seats";
 import { useFrame, useThree } from "@react-three/fiber";
 import { GATE, GATE_RADIUS, MAX_SPEED, ROOM, TICK_MS } from "@tribunal/bot/room/layout";
-import { accessFor, canStand, nearbyBenchSeat, SEAT_REACH, seatForRole } from "@tribunal/bot/room/world";
+import { accessFor, nearbyBenchSeat, SEAT_REACH, seatForRole, slide } from "@tribunal/bot/room/world";
 import { useEffect, useRef } from "react";
 
 /** Distance above which the local prediction snaps back to the server position */
@@ -108,7 +108,8 @@ export const PlayerController = ({ self, trial, speech, speaking, send, occupied
       const dx = (-Math.sin(yawRef.current) * forward + Math.cos(yawRef.current) * strafe) * step;
       const dz = (-Math.cos(yawRef.current) * forward - Math.sin(yawRef.current) * strafe) * step;
       const next = { x: predictedRef.current.x + dx, z: predictedRef.current.z + dz };
-      if (canStand(next, accessFor(self.role, trial))) predictedRef.current = next;
+      // Same sliding rule as the server, so the prediction and the authoritative position stay together along walls:
+      predictedRef.current = slide(predictedRef.current, next, accessFor(self.role, trial));
       facingRef.current = Math.atan2(dx, dz);
     }
 

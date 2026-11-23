@@ -7,7 +7,7 @@ export const speak = async (text: string): Promise<Buffer> => {
   const response = await fetch(`${env.PIPER_URL}/synthesize`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify(env.PIPER_SPEAKER === "" ? { text } : { text, speaker: env.PIPER_SPEAKER }),
     signal: AbortSignal.timeout(SPEAK_TIMEOUT_MS),
   });
   if (!response.ok) throw new Error(`Piper answered ${String(response.status)}`);
