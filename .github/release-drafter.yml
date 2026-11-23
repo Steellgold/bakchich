@@ -1,0 +1,30 @@
+# First version being built. After publishing it, switch both templates to 'v$RESOLVED_VERSION' so the next ones follow the labels.
+name-template: 'v0.0.1'
+tag-template: 'v0.0.1'
+
+# Pull request titles follow the commit prefixes (feat, fix, chore, docs...):
+autolabeler:
+  - labels: ['feat']
+    title: ['/^feat/i']
+  - labels: ['fix']
+    title: ['/^fix/i']
+  - labels: ['chore']
+    title: ['/^(chore|docs|ci|build|refactor|test)/i']
+
+categories:
+  - title: 'Features'
+    semver-increment: minor
+    when:
+      labels: ['feat']
+  - title: 'Bug fixes'
+    when:
+      labels: ['fix']
+  - title: 'Maintenance'
+    when:
+      labels: ['chore']
+
+change-template: '- $TITLE (#$NUMBER) $AUTHORS'
+
+template: |
+  ## Changes
+  $CHANGES

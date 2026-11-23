@@ -1,0 +1,32 @@
+name: Release Drafter
+
+on:
+  push:
+    branches: ["stable"]
+  pull_request:
+    types: ["opened", "reopened", "synchronize", "edited"]
+
+jobs:
+  draft:
+    name: Draft release
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: release-drafter/release-drafter@v7
+        with:
+          config-name: release-drafter.yml
+
+  autolabel:
+    name: Label pull request
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: release-drafter/release-drafter/autolabeler@v7
+        with:
+          config-name: release-drafter.yml
