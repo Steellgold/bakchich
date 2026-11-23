@@ -5,11 +5,11 @@ import { ActivityType, Client, DiscordAPIError, GatewayIntentBits, Partials, RES
 
 export const DISCORD_MAX_MESSAGE_LENGTH = 2000;
 
-/** Discord category where the bot may act freely (see AGENTS.md rules) */
-export const AGENTS_CATEGORY_ID = "1574094410830844105";
+/** Discord category where the bot may act freely (see AGENTS.md rules), the Royaume one unless configured for a test server */
+export const AGENTS_CATEGORY_ID = env.DISCORD_AGENTS_CATEGORY_ID;
 
-/** The « Le Royaume » guild, the only one allowed in the courtroom */
-export const ROYAUME_GUILD_ID = "1095123126746099834";
+/** The guild allowed in the courtroom: « Le Royaume » unless configured for a test server */
+export const ROYAUME_GUILD_ID = env.DISCORD_GUILD_ID;
 
 // Neutralizes mass-ping mentions into inert text so the bot can never ping everyone in a guild channel (low-level helper shared by the send tools):
 export const sanitizeDiscordMessage = (text: string): string => text.replace(/@(everyone|here)/giu, "@{$1}").slice(0, DISCORD_MAX_MESSAGE_LENGTH);

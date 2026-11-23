@@ -4,6 +4,10 @@
   --accent: #c0392b;
 }
 
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
 html, body {
   margin: 0;
   height: 100%;
@@ -35,6 +39,7 @@ html, body {
 }
 
 .room {
+  overflow: hidden;
   position: fixed;
   inset: 0;
 }
