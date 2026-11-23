@@ -46,7 +46,7 @@ const askReason = async (message: Message<true>): Promise<string | null> => {
 };
 
 /** Check the accusation, then announce the hearing: its time comes from the active members, and the Discord event announces it */
-const requestHearing = async (message: Message<true>, accusedIds: string[], crime: string, botId: string, context: string | null) => {
+const openHearing = async (message: Message<true>, accusedIds: string[], crime: string, botId: string, context: string | null) => {
   if (court.get(message.channelId) !== undefined || hasPendingHearing(message.channelId)) {
     await reply(message, `${EMOJI.hourglass} La cour est occupée, revenez plus tard.`);
     return;
@@ -94,6 +94,19 @@ const requestHearing = async (message: Message<true>, accusedIds: string[], crim
   scheduleHearing(hearing);
 
   if (delay > 0) await reply(message, `${EMOJI.courthouse} Procès de ${names} pour « ${crime} » : l'audience s'ouvre <t:${String(Math.round(startsAt.getTime() / 1000))}:R>.${event === null ? "" : ` Rendez-vous sur l'événement : ${event.url}`}`);
+};
+
+// Channels with a request being checked: the checks take several seconds, two requests must not both pass them.
+const requesting = new Set<string>();
+
+const requestHearing = async (message: Message<true>, accusedIds: string[], crime: string, botId: string, context: string | null) => {
+  if (requesting.has(message.channelId)) {
+    await reply(message, `${EMOJI.hourglass} La cour est occupée, revenez plus tard.`);
+    return;
+  }
+
+  requesting.add(message.channelId);
+  await openHearing(message, accusedIds, crime, botId, context).finally(() => requesting.delete(message.channelId));
 };
 
 const showRecord = async (message: Message<true>, targetId: string) => {

@@ -3,7 +3,6 @@
 import type { NearbyInteraction } from "./player-controller";
 import type { VoteResult } from "@tribunal/bot/court/engine";
 import type { ClientMessage, TrialView } from "@tribunal/bot/room/protocol";
-import { formatNames } from "@tribunal/bot/court/engine";
 import { useEffect, useState } from "react";
 
 const VOTE_RESULTS: Record<VoteResult, string> = {
@@ -12,6 +11,9 @@ const VOTE_RESULTS: Record<VoteResult, string> = {
   "closed": "Le vote n'est pas ouvert.",
   "no-trial": "Aucun procès en cours.",
 };
+
+// Not imported from the court engine: its value exports pull Node modules into the browser bundle.
+const joinNames = (names: string[]) => (names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} et ${names.at(-1) ?? ""}`);
 
 const formatCountdown = (endsAt: number, now: number) => {
   const seconds = Math.max(0, Math.round((endsAt - now) / 1_000));
@@ -45,7 +47,7 @@ export const Hud = ({ trial, verdict, voteResult, interaction, seated, send }: H
       <div className="hud-panel">
         {trial === null ? <strong>Audience suspendue</strong> : (
           <>
-            <strong>{`Le peuple contre ${formatNames(trial.accused.map((member) => member.name))}`}</strong>
+            <strong>{`Le peuple contre ${joinNames(trial.accused.map((member) => member.name))}`}</strong>
             <span>{`Crime : « ${trial.crime} »`}</span>
             <span>{`${trial.phase === "debate" ? "Débats" : "Vote"} : ${formatCountdown(trial.endsAt, now)}`}</span>
           </>

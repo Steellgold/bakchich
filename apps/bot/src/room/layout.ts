@@ -66,7 +66,7 @@ const seat = (id: string, x: number, z: number, rotation: number): Seat => ({ id
 
 export const SEATS = {
   judge: seat("judge", 0, 2, 0),
-  // One seat per possible accused (MAX_ACCUSED in the court engine, checked by a test):
+  // One seat per possible accused (MAX_ACCUSED in the court engine, keep both equal):
   accused: Array.from({ length: 5 }, (_, index) => seat(`accused-${String(index)}`, -7, 7.5 + index, Math.PI / 2)),
   prosecutor: seat("prosecutor", -2.5, 9, Math.PI),
   defense: seat("defense", 2.5, 9, Math.PI),

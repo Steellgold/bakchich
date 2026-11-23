@@ -9,7 +9,7 @@ import { trigger } from "#/utils/trigger";
 const LAWYER_LOOKUP_MESSAGES = 100;
 const LAWYER_WINDOW_MS = 30 * 60_000;
 
-// Per channel: the timer of the hearing waiting for its time, and the Discord event announcing the hearing.
+// Per channel: the timer of the hearing waiting for its time, and the event of the trial running there.
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
 const events = new Map<string, string>();
 
@@ -19,9 +19,7 @@ const cancelHearing = async (hearing: Hearing, text: string) => {
   const guild = await discordClient.guilds.fetch(ROYAUME_GUILD_ID);
   await setHearingStatus(hearing.id, "cancelled");
 
-  const eventId = events.get(hearing.channelId);
-  events.delete(hearing.channelId);
-  if (eventId !== undefined) await setHearingEventStatus(guild, eventId, "canceled");
+  if (hearing.eventId !== null) await setHearingEventStatus(guild, hearing.eventId, "canceled");
 
   await sendSafeMessage(await fetchDiscordSendableChannel(hearing.channelId), text, []);
 };
@@ -30,7 +28,7 @@ const startHearing = async (hearing: Hearing) => {
   timers.delete(hearing.channelId);
 
   const guild = await discordClient.guilds.fetch(ROYAUME_GUILD_ID);
-  const found = await Promise.all(hearing.accused.map(async (accused) => ({ accused, member: await findDiscordGuildMember(guild, accused.id) })));
+  const found = await Promise.all(hearing.accused.map(async (accused) => ({ accused, member: await findDiscordGuildMember(guild, accused.id, { force: true }) })));
   const present = found.flatMap(({ member }) => (member === null ? [] : [member]));
 
   if (present.length === 0) {
@@ -44,7 +42,7 @@ const startHearing = async (hearing: Hearing) => {
 
   const recent = await fetchRecentHumanMessages(channel, LAWYER_LOOKUP_MESSAGES);
   const candidates = recent.authors.filter((author) => author.createdTimestamp > Date.now() - LAWYER_WINDOW_MS);
-  const lawyer = pickLawyer(candidates, [...present.map((member) => member.id), hearing.plaintiffId, discordClient.user?.id ?? ""], Math.random);
+  const lawyer = pickLawyer(candidates, [...hearing.accused.map((accused) => accused.id), hearing.plaintiffId, discordClient.user?.id ?? ""], Math.random);
 
   const trial = court.open({
     channelId: hearing.channelId,
@@ -64,16 +62,16 @@ const startHearing = async (hearing: Hearing) => {
     ...(lawyer === null ? [] : [upsertMember({ ...lawyer, avatarUrl: null })]),
   ]);
 
-  const eventId = events.get(hearing.channelId);
-  if (eventId !== undefined) await setHearingEventStatus(guild, eventId, "active");
+  if (hearing.eventId !== null) {
+    events.set(hearing.channelId, hearing.eventId);
+    await setHearingEventStatus(guild, hearing.eventId, "active");
+  }
 };
 
 const start = trigger.safeListener("Hearing start", startHearing);
 
 /** Arm the timer of a hearing: it opens the trial at its time, at once when that time has passed */
 export const scheduleHearing = (hearing: Hearing): void => {
-  if (hearing.eventId !== null) events.set(hearing.channelId, hearing.eventId);
-
   timers.set(hearing.channelId, setTimeout(() => {
     start(hearing);
   }, Math.max(0, hearing.startsAt.getTime() - Date.now())));
