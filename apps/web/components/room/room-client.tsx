@@ -8,7 +8,7 @@ import { PlayerController } from "./player-controller";
 import { seatById } from "./seats";
 import { useRoomSocket } from "@/lib/use-room-socket";
 import { Canvas } from "@react-three/fiber";
-import { SEATS } from "@tribunal/bot/room/layout";
+import { ROOM, SEATS } from "@tribunal/bot/room/layout";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -34,8 +34,8 @@ export const RoomClient = ({ url }: { url: string }) => {
 
   return (
     <div className="room">
-      <Canvas shadows camera={{ fov: 60, position: [0, 4, 34] }}>
-        <color attach="background" args={["#9ad9ff"]} />
+      <Canvas shadows camera={{ fov: 60, position: [ROOM.spawn.x, 3.5, ROOM.depth - 0.4] }}>
+        <color attach="background" args={["#fff4d6"]} />
         <ambientLight intensity={1.4} />
         <directionalLight position={[6, 14, 10]} intensity={2.2} castShadow />
         <Courtroom />

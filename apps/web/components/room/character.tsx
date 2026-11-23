@@ -1,7 +1,7 @@
 "use client";
 
 import type { Vec2 } from "@tribunal/bot/room/layout";
-import type { Group, Texture } from "three";
+import type { BufferGeometry, Group, Texture } from "three";
 import { INK } from "./courtroom";
 import { Html, Outlines } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
@@ -26,7 +26,7 @@ type CharacterProps = {
   follow?: { current: Vec2 };
 };
 
-// Discord avatar as a cube head texture, null while loading or when the CDN refuses it (the head stays plain):
+// Discord avatar for the lapel badge; the sculpted face stays visible for every member.
 const useAvatarTexture = (url: string | null) => {
   const [texture, setTexture] = useState<Texture | null>(null);
 
@@ -54,16 +54,25 @@ const useAvatarTexture = (url: string | null) => {
   return texture;
 };
 
-const BODY_COLORS = ["#ff4f5e", "#3ea6ff", "#3ddc84", "#ff9f1c", "#b388ff", "#ff6fb5", "#2ec4b6"];
+const BODY_COLORS = ["#8e5bff", "#a478ce", "#7c5dbd", "#9462ab", "#b388ff", "#9658ba", "#7e68bd"];
 
 // Same name, same color on every client:
 const colorOf = (name: string) => {
   let sum = 0;
   for (let index = 0; index < name.length; index += 1) sum += name.charCodeAt(index);
-  return BODY_COLORS[sum % BODY_COLORS.length] ?? "#ff4f5e";
+  return BODY_COLORS[sum % BODY_COLORS.length] ?? "#8e5bff";
 };
 
-/** Low-poly member: capsule body with a badge, cube head with the Discord avatar, name tag and speech bubble */
+const facetGeometry = (geometry: BufferGeometry) => {
+  if (geometry.index !== null) {
+    const faces = geometry.toNonIndexed();
+    geometry.copy(faces);
+    faces.dispose();
+  }
+  geometry.computeVertexNormals();
+};
+
+/** Robed low-poly member with swept hair, a white jabot and a Discord lapel badge. */
 export const Character = ({ name, avatarUrl, position, rotation, seated, speech, color, elevation = 0, wig = false, interpolate = false, follow }: CharacterProps) => {
   const groupRef = useRef<Group>(null);
   const texture = useAvatarTexture(avatarUrl);
@@ -81,64 +90,132 @@ export const Character = ({ name, avatarUrl, position, rotation, seated, speech,
   });
 
   const skin = "#ffd1a1";
-  const outline = <Outlines thickness={0.025} color={INK} />;
+  const accent = color ?? colorOf(name);
+  const outline = <Outlines thickness={0.018} color={INK} />;
 
   return (
     <group ref={groupRef} position={[position.x, elevation, position.z]}>
       {!seated && [-0.13, 0.13].map((x) => (
-        <mesh key={x} position={[x, 0.17, 0]} castShadow>
-          <boxGeometry args={[0.16, 0.34, 0.2]} />
+        <mesh key={x} position={[x, 0.23, 0]} castShadow>
+          <boxGeometry args={[0.17, 0.46, 0.24]} />
           <meshToonMaterial color="#3b2a5a" />
           {outline}
         </mesh>
       ))}
-      <mesh position={[0, height, 0]} castShadow>
-        <capsuleGeometry args={[0.26, seated ? 0.3 : 0.55, 2, 6]} />
-        <meshToonMaterial color={color ?? colorOf(name)} />
+      <mesh position={[0, height, 0]} scale-z={0.65} castShadow>
+        <cylinderGeometry onUpdate={facetGeometry} args={[0.3, 0.38, seated ? 0.52 : 0.95, 8]} />
+        <meshToonMaterial color="#272030" />
         {outline}
       </mesh>
-      {[-0.36, 0.36].map((x) => (
-        <mesh key={x} position={[x, height, 0]} rotation-z={x < 0 ? 0.15 : -0.15} castShadow>
-          <capsuleGeometry args={[0.08, 0.4, 2, 6]} />
-          <meshToonMaterial color={skin} />
+      <mesh position={[0, headY - 0.36, 0]} scale={[0.43, 0.13, 0.24]} castShadow>
+        <icosahedronGeometry onUpdate={facetGeometry} args={[1, 1]} />
+        <meshToonMaterial color="#35263d" />
+        {outline}
+      </mesh>
+      {[-1, 1].map((side) => (
+        <group key={side}>
+          <mesh position={[side * 0.3, height + 0.04, 0]} rotation-z={-side * 0.12} castShadow>
+            <cylinderGeometry onUpdate={facetGeometry} args={[0.14, 0.11, seated ? 0.36 : 0.6, 6]} />
+            <meshToonMaterial color="#272030" />
+            {outline}
+          </mesh>
+          <mesh position={[side * 0.34, height + (seated ? 0.14 : -0.3), seated ? 0.23 : 0.02]} castShadow>
+            <icosahedronGeometry onUpdate={facetGeometry} args={[0.08, 1]} />
+            <meshToonMaterial color={skin} />
+            {outline}
+          </mesh>
+        </group>
+      ))}
+      <mesh position={[0, headY - 0.28, 0]}>
+        <cylinderGeometry onUpdate={facetGeometry} args={[0.09, 0.1, 0.18, 8]} />
+        <meshToonMaterial color={skin} />
+      </mesh>
+      <mesh position={[0, headY - 0.34, 0]} scale-z={0.65}>
+        <cylinderGeometry onUpdate={facetGeometry} args={[0.16, 0.25, 0.16, 6]} />
+        <meshToonMaterial color={accent} />
+        {outline}
+      </mesh>
+      {[-1, 1].map((side) => (
+        <mesh key={side} position={[side * 0.055, headY - 0.49, 0.23]} rotation-z={side * 0.06}>
+          <boxGeometry args={[0.085, 0.22, 0.035]} />
+          <meshToonMaterial color="#fff9ee" />
           {outline}
         </mesh>
       ))}
-      <mesh position={[0, headY, 0]} castShadow>
-        <boxGeometry args={[0.5, 0.5, 0.5]} />
+      <mesh position={[0, headY, 0]} scale={[0.91, 1.06, 0.88]} castShadow>
+        <sphereGeometry onUpdate={facetGeometry} args={[0.31, 12, 8]} />
         <meshToonMaterial color={skin} />
         {outline}
       </mesh>
-      <mesh position={[0, headY + 0.28, 0]} castShadow>
-        <boxGeometry args={[0.54, 0.1, 0.54]} />
-        <meshToonMaterial color={color ?? colorOf(name)} />
-        {outline}
-      </mesh>
-      {texture === null ? (
-        <>
-          {[-0.12, 0.12].map((x) => (
-            <mesh key={x} position={[x, headY + 0.04, 0.26]}>
-              <boxGeometry args={[0.08, 0.1, 0.02]} />
-              <meshBasicMaterial color={INK} />
-            </mesh>
-          ))}
-          <mesh position={[0, headY - 0.13, 0.26]}>
-            <boxGeometry args={[0.16, 0.04, 0.02]} />
+      {[-1, 1].map((side) => (
+        <group key={side}>
+          <mesh position={[side * 0.27, headY - 0.015, 0]} scale={[0.75, 1, 0.65]}>
+            <icosahedronGeometry onUpdate={facetGeometry} args={[0.075, 1]} />
+            <meshToonMaterial color={skin} />
+          </mesh>
+          <mesh position={[side * 0.105, headY + 0.025, 0.251]} scale={[1, 1.2, 0.45]}>
+            <sphereGeometry onUpdate={facetGeometry} args={[0.026, 8, 6]} />
             <meshBasicMaterial color={INK} />
           </mesh>
-        </>
-      ) : (
-        <mesh position={[0, headY, 0.26]}>
-          <circleGeometry args={[0.22, 16]} />
+          <mesh position={[side * 0.105, headY + 0.105, 0.237]} rotation-z={-side * 0.1}>
+            <boxGeometry args={[0.075, 0.019, 0.018]} />
+            <meshBasicMaterial color="#603c32" />
+          </mesh>
+        </group>
+      ))}
+      <mesh position={[0, headY - 0.045, 0.267]} scale={[0.035, 0.045, 0.045]}>
+        <icosahedronGeometry onUpdate={facetGeometry} args={[1, 0]} />
+        <meshToonMaterial color="#f5b485" />
+      </mesh>
+      <mesh position={[0, headY - 0.115, 0.252]} rotation-z={Math.PI} scale-y={0.6}>
+        <torusGeometry args={[0.06, 0.009, 3, 10, Math.PI]} />
+        <meshBasicMaterial color={INK} />
+      </mesh>
+      <mesh position={[-0.19, height + 0.04, 0.26]}>
+        <circleGeometry args={[0.085, 12]} />
+        <meshToonMaterial color={accent} />
+      </mesh>
+      {texture !== null && (
+        <mesh position={[-0.19, height + 0.04, 0.263]}>
+          <circleGeometry args={[0.068, 16]} />
           <meshBasicMaterial map={texture} />
         </mesh>
       )}
-      {wig && (
-        <mesh position={[0, headY + 0.4, 0]} castShadow>
-          <icosahedronGeometry args={[0.38, 0]} />
-          <meshToonMaterial color="#ffffff" />
-          {outline}
-        </mesh>
+      <mesh position={[0, headY + 0.04, -0.025]} scale={[0.96, 1, 0.94]} castShadow>
+        <sphereGeometry onUpdate={facetGeometry} args={[0.33, 10, 5, 0, Math.PI * 2, 0, Math.PI * 0.43]} />
+        <meshToonMaterial color={wig ? "#fff9ee" : "#653d2e"} />
+        {outline}
+      </mesh>
+      {wig ? [-1, 1].flatMap((side) => [0.1, -0.06, -0.22].map((offset) => (
+        <group key={`${String(side)}:${String(offset)}`} position={[side * 0.28, headY + offset, -0.015]}>
+          <mesh rotation-x={Math.PI / 2} castShadow>
+            <cylinderGeometry onUpdate={facetGeometry} args={[0.085, 0.085, 0.19, 8]} />
+            <meshToonMaterial color="#fff9ee" />
+            {outline}
+          </mesh>
+          <mesh position={[0, 0, 0.085]}>
+            <torusGeometry args={[0.045, 0.012, 3, 8]} />
+            <meshToonMaterial color="#d8cbd3" />
+          </mesh>
+        </group>
+      ))) : (
+        <>
+          <mesh position={[-0.055, headY + 0.22, 0.14]} rotation-z={-0.28} scale={[0.27, 0.14, 0.18]} castShadow>
+            <icosahedronGeometry onUpdate={facetGeometry} args={[1, 1]} />
+            <meshToonMaterial color="#784833" />
+            {outline}
+          </mesh>
+          <mesh position={[0.19, headY + 0.16, 0.055]} rotation-z={0.35} scale={[0.12, 0.19, 0.17]} castShadow>
+            <icosahedronGeometry onUpdate={facetGeometry} args={[1, 1]} />
+            <meshToonMaterial color="#653d2e" />
+            {outline}
+          </mesh>
+          <mesh position={[0, headY + 0.035, -0.18]} scale={[0.28, 0.26, 0.15]} castShadow>
+            <icosahedronGeometry onUpdate={facetGeometry} args={[1, 1]} />
+            <meshToonMaterial color="#653d2e" />
+            {outline}
+          </mesh>
+        </>
       )}
       <Html position={[0, height + 1.5, 0]} center distanceFactor={10}>
         <div className="tag">
