@@ -5,14 +5,12 @@ import { EMOJI } from "#/court/emojis";
 import { VOTE_MS } from "#/court/engine";
 import { formatVerdictLine } from "#/court/judge";
 import { saveTrial } from "#/court/record";
-import { fetchDiscordSendableChannel, fetchRecentHumanMessages, sendSafeMessage, startDiscordTyping } from "#/integrations/discord";
-import { completeHearing } from "#/triggers/hearings";
+import { fetchDiscordSendableChannel, sendSafeMessage, startDiscordTyping } from "#/integrations/discord";
+import { completeHearing, judgeSays, voiceChannelOf } from "#/triggers/hearings";
 import { attempt } from "#/utils/attempt";
 import { logger } from "#/utils/logger";
 import { trigger } from "#/utils/trigger";
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
-
-const VERDICT_CONTEXT_MESSAGES = 20;
 
 /** Vote message per trial ID, to disable its buttons at the verdict */
 const voteMessages = new Map<string, Message>();
@@ -45,12 +43,16 @@ const handleEvent = async (event: CourtEvent) => {
     const text = await judge.opening(trial).finally(stopTyping);
     await sendSafeMessage(channel, `${EMOJI.gavel} ${text}`, involvedIds(trial));
     court.say(trial.channelId, null, text);
+    judgeSays(trial.channelId, text);
     return;
   }
 
   if (event.type === "vote-started") {
-    const content = `${EMOJI.ballotBox} Les débats sont clos ! ${EMOJI.hourglass} Le peuple a ${String(Math.round(VOTE_MS / 60_000))} minutes pour voter. L'accusé et le plaignant ne votent pas.`;
+    const minutes = String(Math.round(VOTE_MS / 60_000));
+    const onlyVoice = voiceChannelOf(trial.channelId) === null ? "" : " Seuls les membres du salon vocal votent.";
+    const content = `${EMOJI.ballotBox} Les débats sont clos ! ${EMOJI.hourglass} Le peuple a ${minutes} minutes pour voter. Les accusés et le plaignant ne votent pas.${onlyVoice}`;
     voteMessages.set(trial.id, await sendSafeMessage(channel, content, [], voteButtons(trial.id, false)));
+    judgeSays(trial.channelId, `Les débats sont clos ! Le peuple a ${minutes} minutes pour voter. Cliquez sur le bouton coupable ou non coupable.`);
     return;
   }
 
@@ -66,10 +68,10 @@ const handleEvent = async (event: CourtEvent) => {
   if (voteMessage !== undefined) await attempt(async () => voteMessage.edit({ components: voteButtons(trial.id, true) }));
 
   const stopTyping = startDiscordTyping(channel, () => logger.warn("Could not send the typing indicator"));
-  const recent = await fetchRecentHumanMessages(channel, VERDICT_CONTEXT_MESSAGES);
-  const text = await judge.verdict(trial, event.verdict, sentence, recent.lines).finally(stopTyping);
+  const text = await judge.verdict(trial, event.verdict, sentence).finally(stopTyping);
 
   await sendSafeMessage(channel, `${text}\n\n${verdictEmojis(event.verdict)} ${formatVerdictLine(event.verdict, sentence)}`, involvedIds(trial));
+  judgeSays(trial.channelId, `${text} ${formatVerdictLine(event.verdict, sentence)}`);
   await attempt(async () => completeHearing(trial.channelId));
   logger.info(`Trial ${trial.id} closed: ${event.verdict.guilty ? "guilty" : "not guilty"}${event.verdict.reversed ? " (reversed)" : ""}`);
 };

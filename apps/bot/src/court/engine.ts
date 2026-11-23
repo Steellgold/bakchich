@@ -68,26 +68,24 @@ export const computeVerdict = (votes: Map<string, boolean>, rng: () => number): 
   return { guilty: reversed ? !majority : majority, reversed, coinFlip, guiltyVotes, innocentVotes };
 };
 
-type TrialState = { trial: Trial; pleas: number; pleaThreshold: number };
-
 /** Owns trials in progress (one per channel), their timers and votes, and emits every change */
 export class Court extends EventEmitter<{ event: [CourtEvent] }> {
-  private readonly states = new Map<string, TrialState>();
+  private readonly states = new Map<string, Trial>();
 
   public constructor(private readonly rng: () => number = Math.random) {
     super();
   }
 
   public get(channelId: string): Trial | undefined {
-    return this.states.get(channelId)?.trial;
+    return this.states.get(channelId);
   }
 
   /** Every trial in progress */
   public list(): Trial[] {
-    return [...this.states.values()].map((state) => state.trial);
+    return [...this.states.values()];
   }
 
-  /** Relay a line spoken in a trial channel (null speaker = the judge), ignored without trial */
+  /** Relay a line of the judge (null speaker) to the courtroom, ignored without trial */
   public say(channelId: string, speakerId: string | null, text: string): void {
     const trial = this.get(channelId);
     if (trial !== undefined) this.emit("event", { type: "speech", trial, speakerId, text });
@@ -97,7 +95,7 @@ export class Court extends EventEmitter<{ event: [CourtEvent] }> {
     if (this.states.has(input.channelId)) return "busy";
 
     const trial: Trial = { ...input, id: randomUUID(), phase: "debate", votes: new Map(), startedAt: new Date(), phaseEndsAt: Date.now() + DEBATE_MS };
-    this.states.set(input.channelId, { trial, pleas: 0, pleaThreshold: this.drawPleaThreshold() });
+    this.states.set(input.channelId, trial);
     this.emit("event", { type: "opened", trial });
 
     setTimeout(() => {
@@ -123,22 +121,5 @@ export class Court extends EventEmitter<{ event: [CourtEvent] }> {
     trial.votes.set(voterId, guilty);
     this.emit("event", { type: "vote-cast", trial });
     return "ok";
-  }
-
-  /** Count a debate message, true when the judge should intervene */
-  public plea(channelId: string): boolean {
-    const state = this.states.get(channelId);
-    if (state?.trial.phase !== "debate") return false;
-
-    state.pleas += 1;
-    if (state.pleas < state.pleaThreshold) return false;
-
-    state.pleas = 0;
-    state.pleaThreshold = this.drawPleaThreshold();
-    return true;
-  }
-
-  private drawPleaThreshold(): number {
-    return 4 + Math.floor(this.rng() * 2);
   }
 }

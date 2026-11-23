@@ -91,8 +91,8 @@ export const createJudge = (generate: Generate) => ({
       Open the trial by reading the indictment dramatically.
       Accused: ${accusedNames(trial)}. Prosecutor (plaintiff): ${trial.plaintiff.name}. Defense: ${defense}.
       Crime: « ${trial.crime} ».
-      Announce that the debate lasts ${String(minutes(DEBATE_MS))} minutes and that everyone can plead in the channel.
-    `, `Oyez, oyez ! ${accusedNames(trial)} ${isGroup(trial) ? "sont accusés" : "est accusé"} de « ${trial.crime} » par ${trial.plaintiff.name}. Défense : ${trial.lawyer?.name ?? "aucune, débrouille-toi"}. Les débats sont ouverts pour ${String(minutes(DEBATE_MS))} minutes.`);
+      Announce that the debate lasts ${String(minutes(DEBATE_MS))} minutes and that everyone pleads out loud in the voice channel, then votes.
+    `, `Oyez, oyez ! ${accusedNames(trial)} ${isGroup(trial) ? "sont accusés" : "est accusé"} de « ${trial.crime} » par ${trial.plaintiff.name}. Défense : ${trial.lawyer?.name ?? "aucune, débrouille-toi"}. Les débats sont ouverts pour ${String(minutes(DEBATE_MS))} minutes, à l'oral dans le salon vocal.`);
   },
 
   intervene: async (trial: Trial, recentMessages: string[]): Promise<string> => ask(generate, persona, dedent`
@@ -106,10 +106,8 @@ export const createJudge = (generate: Generate) => ({
     Make up a single absurd and harmless sentence (punishment), in one short French sentence, and nothing else.
   `, "Porter une couronne en carton pendant une semaine."),
 
-  verdict: async (trial: Trial, verdict: Verdict, sentence: string | null, recentMessages: string[]): Promise<string> => ask(generate, persona, dedent`
+  verdict: async (trial: Trial, verdict: Verdict, sentence: string | null): Promise<string> => ask(generate, persona, dedent`
     Deliver the verdict of the trial of ${accusedNames(trial)} for « ${trial.crime} », complaint filed by ${trial.plaintiff.name}.
-    Sum up the debate in one mocking sentence:
-    ${recentMessages.join("\n")}
     ${describeVerdict(verdict)}
     ${sentence === null ? "No sentence: the accused walk free." : `Sentence pronounced: ${sentence}`}
   `, `La cour a délibéré : ${accusedNames(trial)} ${isGroup(trial) ? "sont" : "est"} ${verdict.guilty ? "COUPABLE" : "NON COUPABLE"}${isGroup(trial) ? "S" : ""}${verdict.reversed ? " (le juge a renversé le vote, parce que)" : ""}.${sentence === null ? "" : ` Peine : ${sentence}`}`),

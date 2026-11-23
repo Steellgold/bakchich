@@ -2,7 +2,7 @@ import type { VoteResult } from "#/court/engine";
 import { court } from "#/court/court";
 import { EMOJI } from "#/court/emojis";
 import { upsertMember } from "#/court/members";
-import { forceStartAnswers, forceStartHearing } from "#/triggers/hearings";
+import { forceStartAnswers, forceStartHearing, voiceChannelOf } from "#/triggers/hearings";
 import { trigger } from "#/utils/trigger";
 import { MessageFlags } from "discord.js";
 
@@ -23,6 +23,13 @@ trigger.discordEvent("interactionCreate", async (interaction) => {
   // Buttons of a finished trial, or of a trial lost in a restart:
   if (court.get(channelId)?.id !== trialId) {
     await interaction.reply({ content: TRIAL_OVER, flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  // The trial is pleaded and voted in its voice channel: only the members there vote.
+  const voiceChannelId = voiceChannelOf(channelId);
+  if (voiceChannelId !== null && interaction.guild?.voiceStates.cache.get(interaction.user.id)?.channelId !== voiceChannelId) {
+    await interaction.reply({ content: `${EMOJI.cross} Pour voter, rejoins le salon vocal <#${voiceChannelId}>.`, flags: MessageFlags.Ephemeral });
     return;
   }
 

@@ -5,7 +5,7 @@ A Discord bot for the « Le Royaume » community: members put each other on tria
 ## Key Patterns
 
 - **Code decides, AI talks** – the court engine owns every rule (phases, timers, votes, verdict, records). The AI writes text from facts the code gives it and may return a structured intent (open a trial, show a record, chat) that the code validates before acting. It never calls Discord or the database itself.
-- **Limited Discord writes** – the bot sends messages, edits its own messages, shows the typing indicator, answers button interactions and creates a voice channel and a scheduled event for each hearing in the audio category (`DISCORD_VOICE_CATEGORY_ID`) and deletes the channels it created. Nothing else.
+- **Limited Discord writes** – the bot sends messages, edits its own messages, shows the typing indicator, answers button interactions and creates a voice channel and a scheduled event for each hearing in the audio category (`DISCORD_VOICE_CATEGORY_ID`) deletes the channels it created, and joins the voice channel of its hearing to speak in it (text-to-speech). Nothing else.
 - **Stupid on purpose** – the tone is a ridiculous, corrupt judge. Never serious, never moralizing.
 
 ## Agent approach

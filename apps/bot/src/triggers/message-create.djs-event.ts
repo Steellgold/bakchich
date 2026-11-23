@@ -137,21 +137,8 @@ trigger.discordEvent("messageCreate", async (message) => {
     return;
   }
 
-  // Every human line of a trial channel is relayed to the courtroom:
-  court.say(message.channelId, message.author.id, message.content);
-
-  // Plain messages are pleas during a debate, and the judge intervenes from time to time:
-  if (!mentioned) {
-    const trial = court.get(message.channelId);
-    if (trial === undefined || !court.plea(message.channelId)) return;
-
-    const stopTyping = startDiscordTyping(message.channel, () => logger.warn("Could not send the typing indicator"));
-    const recent = await fetchRecentHumanMessages(message.channel, CONTEXT_MESSAGES);
-    const intervention = await judge.intervene(trial, recent.lines).finally(stopTyping);
-    await message.channel.send({ content: sanitizeDiscordMessage(`${EMOJI.judge} ${intervention}`), allowedMentions: { parse: [] } });
-    court.say(message.channelId, null, intervention);
-    return;
-  }
+  // Trials are pleaded out loud in the voice channel: written messages only matter when they talk to the bot.
+  if (!mentioned) return;
 
   const command = parseCommand(message.content, botUser.id);
   logger.info(`Command from ${message.author.username} in ${message.channelId}: ${command?.kind ?? "chat"}`);
