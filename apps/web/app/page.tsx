@@ -8,9 +8,13 @@ const HomePage = async () => {
 
   return (
     <main className="home">
-      <h1>Tribunal du Royaume</h1>
-      <p>La cour est corrompue, le juge aussi. Entrez, asseyez-vous, votez.</p>
-      {session === null ? <SignInButton /> : <Link className="button" href="/room">Entrer dans la salle d'audience</Link>}
+      <div className="card">
+        <div className="gavel">🔨</div>
+        <h1>Tribunal du Royaume</h1>
+        <span className="sticker">Justice 100% corrompue</span>
+        <p>La cour est corrompue, le juge aussi. Entrez, asseyez-vous, votez.</p>
+        {session === null ? <SignInButton /> : <Link className="button" href="/room">Entrer dans la salle d'audience</Link>}
+      </div>
     </main>
   );
 };

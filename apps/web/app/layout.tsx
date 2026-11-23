@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { Lilita_One } from "next/font/google";
 import "./globals.css";
+
+const display = Lilita_One({ weight: "400", subsets: ["latin"], variable: "--font-display" });
 
 export const metadata: Metadata = {
   title: "Tribunal du Royaume",
@@ -8,7 +11,7 @@ export const metadata: Metadata = {
 };
 
 const RootLayout = ({ children }: { children: ReactNode }) => (
-  <html lang="fr">
+  <html lang="fr" className={display.variable}>
     <body>{children}</body>
   </html>
 );
