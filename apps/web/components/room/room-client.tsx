@@ -40,7 +40,7 @@ export const RoomClient = ({ url }: { url: string }) => {
         <directionalLight position={[6, 14, 10]} intensity={2.2} castShadow />
         <Courtroom />
 
-        <Character name="Le Juge" avatarUrl={null} position={SEATS.judge.position} rotation={SEATS.judge.rotation} seated speech={latestSpeech(speeches, null)} color="#8e5bff" wig />
+        <Character name="Le Juge" avatarUrl={null} position={SEATS.judge.position} rotation={SEATS.judge.rotation} seated speech={latestSpeech(speeches, null)} color="#8e5bff" elevation={1.05} wig />
 
         {snapshot?.npcs.map((npc) => {
           const seat = seatById.get(npc.seatId);

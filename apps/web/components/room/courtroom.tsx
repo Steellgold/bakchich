@@ -1,67 +1,90 @@
 "use client";
 
 import type { Box } from "@tribunal/bot/room/layout";
+import { tilesTexture, wallpaperTexture, woodTexture } from "./textures";
 import { Outlines } from "@react-three/drei";
 import { GATE, OBSTACLES, RESTRICTED_ZONE, ROOM, SIDE_DOOR } from "@tribunal/bot/room/layout";
 import { useMemo } from "react";
-import { CanvasTexture, NearestFilter, RepeatWrapping, SRGBColorSpace } from "three";
 
 export const INK = "#2b1b3d";
 
-const COLORS: Record<Box["kind"], string> = {
-  wall: "#7ad7f0",
-  bench: "#ff8fab",
-  desk: "#ffd23f",
-  rail: "#3ddc84",
-  stand: "#b388ff",
+// Tints multiplied with the wood texture:
+const WOOD_TINTS: Record<"bench" | "desk" | "stand" | "rail", string> = {
+  bench: "#ffd9b0",
+  desk: "#e8b27a",
+  stand: "#c58a5a",
+  rail: "#f5d2a0",
 };
 
-/** Tiny 2x2 checkerboard, each pixel being one 2 m tile once repeated */
-const useChecker = (light: string, dark: string, width: number, depth: number) => useMemo(() => {
-  const canvas = document.createElement("canvas");
-  canvas.width = 2;
-  canvas.height = 2;
-  const context = canvas.getContext("2d");
-  if (context !== null) {
-    context.fillStyle = light;
-    context.fillRect(0, 0, 2, 2);
-    context.fillStyle = dark;
-    context.fillRect(0, 0, 1, 1);
-    context.fillRect(1, 1, 1, 1);
-  }
-  const texture = new CanvasTexture(canvas);
-  texture.magFilter = NearestFilter;
-  texture.wrapS = RepeatWrapping;
-  texture.wrapT = RepeatWrapping;
-  texture.colorSpace = SRGBColorSpace;
-  texture.repeat.set(width / 4, depth / 4);
-  return texture;
-}, [light, dark, width, depth]);
+type Textures = { wood: ReturnType<typeof woodTexture>; wallpaper: ReturnType<typeof wallpaperTexture> };
 
-/** Low-poly plant: trunk and a stack of cones */
-const Plant = ({ x, z }: { x: number; z: number }) => (
-  <group position={[x, 0, z]}>
-    <mesh position={[0, 0.4, 0]} castShadow>
-      <cylinderGeometry args={[0.15, 0.2, 0.8, 5]} />
-      <meshToonMaterial color="#c97b3a" />
-      <Outlines thickness={0.03} color={INK} />
-    </mesh>
-    {[1.1, 1.8].map((y, index) => (
-      <mesh key={y} position={[0, y, 0]} castShadow>
-        <coneGeometry args={[0.9 - index * 0.25, 1.2, 5]} />
-        <meshToonMaterial color={index === 0 ? "#2ecc71" : "#58e08a"} />
-        <Outlines thickness={0.03} color={INK} />
-      </mesh>
-    ))}
-  </group>
+const Wood = ({ kind, textures }: { kind: keyof typeof WOOD_TINTS; textures: Textures }) => (
+  <meshToonMaterial map={textures.wood} color={WOOD_TINTS[kind]} />
 );
 
-/** The courtroom built from the shared layout: checkered floors, candy-colored furniture, plants */
+const Part = ({ position, size, textures, kind, outline = true }: { position: [number, number, number]; size: [number, number, number]; textures: Textures; kind: keyof typeof WOOD_TINTS; outline?: boolean }) => (
+  <mesh position={position} castShadow receiveShadow>
+    <boxGeometry args={size} />
+    <Wood kind={kind} textures={textures} />
+    {outline && <Outlines thickness={0.025} color={INK} />}
+  </mesh>
+);
+
+/** Public bench: seat, two side panels and a backrest on the entrance side */
+const Bench = ({ box, textures }: { box: Box; textures: Textures }) => {
+  const width = box.max.x - box.min.x;
+  const depth = box.max.z - box.min.z;
+  return (
+    <group position={[(box.min.x + box.max.x) / 2, 0, (box.min.z + box.max.z) / 2]}>
+      <Part position={[0, 0.45, 0]} size={[width, 0.1, depth]} textures={textures} kind="bench" />
+      <Part position={[-width / 2 + 0.05, 0.2, 0]} size={[0.1, 0.4, depth]} textures={textures} kind="stand" />
+      <Part position={[width / 2 - 0.05, 0.2, 0]} size={[0.1, 0.4, depth]} textures={textures} kind="stand" />
+      <Part position={[0, 0.85, depth / 2 + 0.04]} size={[width, 0.6, 0.08]} textures={textures} kind="bench" />
+    </group>
+  );
+};
+
+/** Desk: top slab on four legs */
+const Desk = ({ box, textures }: { box: Box; textures: Textures }) => {
+  const width = box.max.x - box.min.x;
+  const depth = box.max.z - box.min.z;
+  const legHeight = box.height - 0.1;
+  return (
+    <group position={[(box.min.x + box.max.x) / 2, 0, (box.min.z + box.max.z) / 2]}>
+      <Part position={[0, box.height - 0.05, 0]} size={[width, 0.1, depth]} textures={textures} kind="desk" />
+      {[-1, 1].flatMap((sx) => [-1, 1].map((sz) => (
+        <Part key={`${String(sx)}:${String(sz)}`} position={[sx * (width / 2 - 0.1), legHeight / 2, sz * (depth / 2 - 0.1)]} size={[0.12, legHeight, 0.12]} textures={textures} kind="stand" outline={false} />
+      )))}
+    </group>
+  );
+};
+
+/** Balustrade: top bar on thin balusters, along the longest side of the box */
+const Rail = ({ box, textures }: { box: Box; textures: Textures }) => {
+  const width = box.max.x - box.min.x;
+  const depth = box.max.z - box.min.z;
+  const horizontal = width >= depth;
+  const length = horizontal ? width : depth;
+  const thickness = horizontal ? depth : width;
+  const posts = Math.floor(length / 0.7) + 1;
+  return (
+    <group position={[(box.min.x + box.max.x) / 2, 0, (box.min.z + box.max.z) / 2]}>
+      <Part position={[0, box.height - 0.05, 0]} size={horizontal ? [length, 0.1, thickness + 0.1] : [thickness + 0.1, 0.1, length]} textures={textures} kind="rail" />
+      {Array.from({ length: posts }, (_, index) => {
+        const offset = -length / 2 + 0.06 + (index * (length - 0.12)) / Math.max(posts - 1, 1);
+        return <Part key={offset} position={horizontal ? [offset, (box.height - 0.1) / 2, 0] : [0, (box.height - 0.1) / 2, offset]} size={[0.1, box.height - 0.1, 0.1]} textures={textures} kind="rail" outline={false} />;
+      })}
+    </group>
+  );
+};
+
+/** The courtroom built from the shared layout: tiled floors, wallpapered walls, wooden furniture */
 export const Courtroom = () => {
   const zoneWidth = RESTRICTED_ZONE.max.x - RESTRICTED_ZONE.min.x;
   const zoneDepth = RESTRICTED_ZONE.max.z - RESTRICTED_ZONE.min.z;
-  const publicFloor = useChecker("#fff1c1", "#ffd98a", ROOM.width, ROOM.depth);
-  const zoneFloor = useChecker("#d9c8ff", "#b69cff", zoneWidth, zoneDepth);
+  const textures = useMemo(() => ({ wood: woodTexture(), wallpaper: wallpaperTexture() }), []);
+  const publicFloor = useMemo(() => tilesTexture("#fff1c1", "#f0d28a", ROOM.width / 4, ROOM.depth / 4), []);
+  const zoneFloor = useMemo(() => tilesTexture("#d9c8ff", "#b69cff", zoneWidth / 4, zoneDepth / 4), [zoneWidth, zoneDepth]);
 
   return (
     <group>
@@ -75,23 +98,24 @@ export const Courtroom = () => {
         <meshToonMaterial map={zoneFloor} />
       </mesh>
 
-      {OBSTACLES.map((box) => (
-        <mesh
-          key={`${String(box.min.x)}:${String(box.min.z)}:${box.kind}`}
-          position={[(box.min.x + box.max.x) / 2, box.height / 2, (box.min.z + box.max.z) / 2]}
-          castShadow
-          receiveShadow
-        >
-          <boxGeometry args={[box.max.x - box.min.x, box.height, box.max.z - box.min.z]} />
-          <meshToonMaterial color={COLORS[box.kind]} />
-          <Outlines thickness={0.04} color={INK} />
-        </mesh>
-      ))}
-
-      <Plant x={-9} z={28.5} />
-      <Plant x={9} z={28.5} />
-      <Plant x={-9} z={14.5} />
-      <Plant x={9} z={14.5} />
+      {OBSTACLES.map((box) => {
+        const key = `${String(box.min.x)}:${String(box.min.z)}:${box.kind}`;
+        if (box.kind === "bench") return <Bench key={key} box={box} textures={textures} />;
+        if (box.kind === "desk") return <Desk key={key} box={box} textures={textures} />;
+        if (box.kind === "rail") return <Rail key={key} box={box} textures={textures} />;
+        return (
+          <mesh
+            key={key}
+            position={[(box.min.x + box.max.x) / 2, box.height / 2, (box.min.z + box.max.z) / 2]}
+            castShadow
+            receiveShadow
+          >
+            <boxGeometry args={[box.max.x - box.min.x, box.height, box.max.z - box.min.z]} />
+            {box.kind === "wall" ? <meshToonMaterial map={textures.wallpaper} /> : <Wood kind="stand" textures={textures} />}
+            <Outlines thickness={0.04} color={INK} />
+          </mesh>
+        );
+      })}
 
       <mesh position={[GATE.x, 0.03, GATE.z]} rotation-x={-Math.PI / 2}>
         <ringGeometry args={[0.4, 0.6, 5]} />
@@ -100,7 +124,7 @@ export const Courtroom = () => {
 
       <mesh position={[SIDE_DOOR.x - 0.05, 1.2, SIDE_DOOR.z]}>
         <boxGeometry args={[0.1, 2.4, 1.4]} />
-        <meshToonMaterial color="#ff4f5e" />
+        <Wood kind="stand" textures={textures} />
         <Outlines thickness={0.04} color={INK} />
       </mesh>
     </group>

@@ -16,6 +16,8 @@ type CharacterProps = {
   seated: boolean;
   speech: string | null;
   color?: string;
+  /** Height of the floor under the character (the judge sits on his stand) */
+  elevation?: number;
   /** Judge's powdered wig */
   wig?: boolean;
   /** Smoothly follow the given position (remote players) instead of jumping to it */
@@ -62,7 +64,7 @@ const colorOf = (name: string) => {
 };
 
 /** Low-poly member: capsule body with a badge, cube head with the Discord avatar, name tag and speech bubble */
-export const Character = ({ name, avatarUrl, position, rotation, seated, speech, color, wig = false, interpolate = false, follow }: CharacterProps) => {
+export const Character = ({ name, avatarUrl, position, rotation, seated, speech, color, elevation = 0, wig = false, interpolate = false, follow }: CharacterProps) => {
   const groupRef = useRef<Group>(null);
   const texture = useAvatarTexture(avatarUrl);
   const height = seated ? 0.45 : 0.9;
@@ -78,31 +80,67 @@ export const Character = ({ name, avatarUrl, position, rotation, seated, speech,
     current.rotation.y = rotation;
   });
 
+  const skin = "#ffd1a1";
+  const outline = <Outlines thickness={0.025} color={INK} />;
+
   return (
-    <group ref={groupRef} position={[position.x, 0, position.z]}>
+    <group ref={groupRef} position={[position.x, elevation, position.z]}>
+      {!seated && [-0.13, 0.13].map((x) => (
+        <mesh key={x} position={[x, 0.17, 0]} castShadow>
+          <boxGeometry args={[0.16, 0.34, 0.2]} />
+          <meshToonMaterial color="#3b2a5a" />
+          {outline}
+        </mesh>
+      ))}
       <mesh position={[0, height, 0]} castShadow>
-        <capsuleGeometry args={[0.28, seated ? 0.3 : 0.7, 2, 6]} />
+        <capsuleGeometry args={[0.26, seated ? 0.3 : 0.55, 2, 6]} />
         <meshToonMaterial color={color ?? colorOf(name)} />
-        <Outlines thickness={0.03} color={INK} />
+        {outline}
       </mesh>
-      <mesh position={[0, height + 0.1, 0.3]}>
-        <boxGeometry args={[0.18, 0.18, 0.06]} />
-        <meshToonMaterial color="#ffd23f" />
-        <Outlines thickness={0.02} color={INK} />
-      </mesh>
+      {[-0.36, 0.36].map((x) => (
+        <mesh key={x} position={[x, height, 0]} rotation-z={x < 0 ? 0.15 : -0.15} castShadow>
+          <capsuleGeometry args={[0.08, 0.4, 2, 6]} />
+          <meshToonMaterial color={skin} />
+          {outline}
+        </mesh>
+      ))}
       <mesh position={[0, headY, 0]} castShadow>
         <boxGeometry args={[0.5, 0.5, 0.5]} />
-        <meshToonMaterial color={texture === null ? "#ffd1a1" : "#ffffff"} map={texture} />
-        <Outlines thickness={0.03} color={INK} />
+        <meshToonMaterial color={skin} />
+        {outline}
       </mesh>
+      <mesh position={[0, headY + 0.28, 0]} castShadow>
+        <boxGeometry args={[0.54, 0.1, 0.54]} />
+        <meshToonMaterial color={color ?? colorOf(name)} />
+        {outline}
+      </mesh>
+      {texture === null ? (
+        <>
+          {[-0.12, 0.12].map((x) => (
+            <mesh key={x} position={[x, headY + 0.04, 0.26]}>
+              <boxGeometry args={[0.08, 0.1, 0.02]} />
+              <meshBasicMaterial color={INK} />
+            </mesh>
+          ))}
+          <mesh position={[0, headY - 0.13, 0.26]}>
+            <boxGeometry args={[0.16, 0.04, 0.02]} />
+            <meshBasicMaterial color={INK} />
+          </mesh>
+        </>
+      ) : (
+        <mesh position={[0, headY, 0.26]}>
+          <circleGeometry args={[0.22, 16]} />
+          <meshBasicMaterial map={texture} />
+        </mesh>
+      )}
       {wig && (
         <mesh position={[0, headY + 0.4, 0]} castShadow>
           <icosahedronGeometry args={[0.38, 0]} />
           <meshToonMaterial color="#ffffff" />
-          <Outlines thickness={0.03} color={INK} />
+          {outline}
         </mesh>
       )}
-      <Html position={[0, height + 1.4, 0]} center distanceFactor={10}>
+      <Html position={[0, height + 1.5, 0]} center distanceFactor={10}>
         <div className="tag">
           {speech !== null && <div className="bubble">{speech}</div>}
           <div className="name">{name}</div>

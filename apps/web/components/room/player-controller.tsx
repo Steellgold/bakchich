@@ -10,7 +10,7 @@ import { canStand } from "@tribunal/bot/room/world";
 import { useEffect, useRef } from "react";
 
 /** Distance above which the local prediction snaps back to the server position */
-const SNAP_DISTANCE = 1;
+const SNAP_DISTANCE = 3;
 const CAMERA_DISTANCE = 6;
 const CAMERA_HEIGHT = 3.5;
 const CAMERA_MARGIN = 0.4;
