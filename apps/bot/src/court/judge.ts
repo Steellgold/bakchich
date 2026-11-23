@@ -1,5 +1,7 @@
 import type { RecordEntry, Trial, Verdict } from "./engine";
+import type { Intent } from "./intent";
 import { DEBATE_MS, formatNames } from "./engine";
+import { parseIntent } from "./intent";
 import dedent from "dedent";
 
 /** Text generator: instructions (persona) and prompt in, text out */
@@ -24,6 +26,15 @@ const screenInstructions = dedent`
   Otherwise, answer REFUS followed by a short, pompous and funny refusal sentence written in French.
   Refuse: harassment, serious insults, racism and discrimination, sexual content, accusations of real crimes, health, personal data.
   Your first word must be OK or REFUS.
+`;
+
+const interpretInstructions = dedent`
+  You are the clerk of the Tribunal of « Le Royaume », a game of absurd fake trials between friends on Discord.
+  You receive a message addressed to the Tribunal. Decide what the author wants:
+  - open-trial: they want to put someone, or a group of people, on trial. Put the accusation, in French and in one short phrase, in "crime", or null when the message gives no reason.
+  - show-record: they want to see the criminal record of someone.
+  - chat: anything else.
+  Answer with one single JSON object and nothing else, like {"intent":"open-trial","crime":"vol de croissant"} or {"intent":"chat","crime":null}.
 `;
 
 const minutes = (ms: number) => Math.round(ms / 60_000);
@@ -112,8 +123,11 @@ export const createJudge = (generate: Generate) => ({
 
   chat: async (authorName: string, message: string): Promise<string> => ask(generate, persona, dedent`
     ${authorName} talks to you outside of any trial: « ${message} ».
-    Answer in character, then remind the two commands: « procès à @membre pour <crime> » and « casier @membre ».
-  `, "La cour ne reçoit que deux requêtes : « procès à @membre pour <crime> » et « casier @membre »."),
+    Answer in character, then remind that you understand plain requests such as « ouvre un procès à @membre parce qu'il a volé mon croissant » or « montre-moi le casier de @membre ».
+  `, "La cour comprend les requêtes simples : « ouvre un procès à @membre parce que… » ou « montre-moi le casier de @membre »."),
+
+  /** What the author of a message to the Tribunal wants, plain chat when the AI answer is unreadable */
+  interpret: async (message: string): Promise<Intent> => parseIntent(await ask(generate, interpretInstructions, `Message: « ${message} »`, `{"intent":"chat","crime":null}`)),
 
   screen: async (crime: string, accusedName: string, recentMessages: string[]): Promise<ScreenResult> => {
     const answer = await ask(generate, screenInstructions, dedent`
