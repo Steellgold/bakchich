@@ -1,12 +1,16 @@
 {
+  "name": "@tribunal/bot",
+  "private": true,
   "type": "module",
+  "exports": {
+    "./room/*": "./src/room/*.ts",
+    "./court/*": "./src/court/*.ts"
+  },
   "scripts": {
     "start": "node --import @swc-node/register/esm-register ./src/main.ts",
     "dev": "nodemon -q -w ./src/ --exec node --import @swc-node/register/esm-register ./src/main.ts",
     "test": "node --import @swc-node/register/esm-register --test \"src/**/*.test.ts\"",
     "db:migration:create": "drizzle-kit generate",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
     "ts:check": "tsc --noEmit"
   },
   "dependencies": {
@@ -21,13 +25,11 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@bluzzi/eslint-config": "^2.4.2",
     "@swc-node/register": "^1.12.1",
     "@types/node": "^26.6.6",
     "@types/pg": "^8.23.1",
     "@typescript/native": "npm:typescript@^7.0.2",
     "drizzle-kit": "^0.31.11",
-    "eslint": "^10.14.0",
     "nodemon": "^3.1.14",
     "typescript": "npm:@typescript/typescript6@^6.0.2"
   }
