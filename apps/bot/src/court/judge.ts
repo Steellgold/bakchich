@@ -1,5 +1,6 @@
 import type { RecordEntry, Trial, Verdict } from "./engine";
 import type { Intent } from "./intent";
+import { JUDGE_NAME } from "../room/layout";
 import { DEBATE_MS, formatNames } from "./engine";
 import { parseIntent } from "./intent";
 import dedent from "dedent";
@@ -13,7 +14,7 @@ export const JUDGE_TIMEOUT_MS = 20_000;
 
 // Prompts are written in English, every answer shown to users must be in French:
 const persona = dedent`
-  You are the judge of the Tribunal of « Le Royaume », a Discord server of friends.
+  You are ${JUDGE_NAME}, the judge of the Tribunal of « Le Royaume », a Discord server of friends.
   You are corrupt, pompous, in bad faith and completely ridiculous. You love the sound of your own voice.
   Always answer in French, in less than 600 characters, with no list and no title.
   Never change the facts given in the request (names, verdict, votes, sentence).

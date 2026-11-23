@@ -6,6 +6,9 @@ export type Vec2 = { x: number; z: number };
 export type Box = { min: Vec2; max: Vec2; height: number; kind: "wall" | "bench" | "desk" | "rail" | "stand" };
 export type Seat = { id: string; position: Vec2; rotation: number };
 
+/** Name of the judge, also the name to give the bot account in the Discord developer portal */
+export const JUDGE_NAME = "Juge Bakchich";
+
 export const MAX_SPEED = 4;
 export const GATE_RADIUS = 1.5;
 export const TICK_MS = 100;

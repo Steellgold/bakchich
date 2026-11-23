@@ -11,7 +11,7 @@ import { PlayerController } from "./player-controller";
 import { isBenchSeat, seatById } from "./seats";
 import { useRoomSocket } from "@/lib/use-room-socket";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { MAX_SPEED, ROOM, SEATS } from "@tribunal/bot/room/layout";
+import { JUDGE_NAME, MAX_SPEED, ROOM, SEATS } from "@tribunal/bot/room/layout";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -87,7 +87,7 @@ export const RoomClient = ({ url, token }: { url: string; token?: string }) => {
         <directionalLight position={[6, 14, 10]} intensity={2.2} castShadow />
         <Courtroom />
 
-        <Character id={SEATS.judge.id} name="Le Juge" avatarUrl={null} position={SEATS.judge.position} rotation={SEATS.judge.rotation} seated speech={latestSpeech(speeches, null)} speaking={speaking.has("judge")} color="#8e5bff" elevation={1.05} wig />
+        <Character id={SEATS.judge.id} name={JUDGE_NAME} avatarUrl={null} position={SEATS.judge.position} rotation={SEATS.judge.rotation} seated speech={latestSpeech(speeches, null)} speaking={speaking.has("judge")} color="#8e5bff" elevation={1.05} wig />
 
         {snapshot?.npcs.map((npc) => {
           const seat = seatById.get(npc.seatId);
