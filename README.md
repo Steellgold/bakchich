@@ -1,25 +1,25 @@
 # Tribunal
 
-Bot Discord du serveur « Le Royaume » : on traîne ses potes devant un juge corrompu (une IA) pour des crimes absurdes. La salle débat, vote, le juge rend son verdict et chaque condamnation finit au casier judiciaire.
+Discord bot for the « Le Royaume » server: members drag each other in front of a corrupt AI judge for absurd crimes. The room debates and votes, the judge delivers the verdict, and every conviction ends up in a permanent criminal record.
 
-Les procès ne se jouent que dans la catégorie AGENTS.
+Trials only run inside the AGENTS category. Everything shown on Discord is in French.
 
-## Commandes
+## Commands
 
-- `@Tribunal procès @membre pour <crime>` : ouvre un procès (5 min de débats, 2 min de vote).
-- `@Tribunal casier @membre` : affiche le casier judiciaire.
+- `@Tribunal procès @member pour <crime>`: opens a trial (5 min of debate, 2 min of voting).
+- `@Tribunal casier @member`: shows the member's criminal record.
 
-## Lancer en local
+## Run locally
 
 ```bash
-cp .env.example .env   # puis remplir les valeurs
+cp .env.example .env   # then fill in the values
 docker compose up -d   # Postgres
 pnpm install
 pnpm run dev
 ```
 
-Vérifications : `pnpm run ts:check`, `pnpm run lint:fix`, `pnpm run test`.
+Checks: `pnpm run ts:check`, `pnpm run lint:fix`, `pnpm run test`.
 
-## Crédits
+## Credits
 
-Ossature reprise de [Bluzzi/discord-agent](https://github.com/Bluzzi/discord-agent).
+Base structure from [Bluzzi/discord-agent](https://github.com/Bluzzi/discord-agent).
