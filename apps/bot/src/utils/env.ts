@@ -13,6 +13,9 @@ const schema = z.object({
   OPENROUTER_API_KEY: z.string(),
   OPENROUTER_MODELS: z.string().default(""),
 
+  // Voice channel of the hearing events, empty to open trials at once without any event:
+  DISCORD_TRIAL_VOICE_CHANNEL_ID: z.string().default(""),
+
   PIPER_URL: z.url().default("http://localhost:5000"),
 
   ROOM_PORT: z.coerce.number().int().default(3001),

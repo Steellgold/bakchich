@@ -1,7 +1,7 @@
 import type { Channel, Guild, GuildMember, Message, MessageCreateOptions, SendableChannels } from "discord.js";
 import { env } from "#/utils/env";
 import { logger } from "#/utils/logger";
-import { ActivityType, Client, DiscordAPIError, GatewayIntentBits, Partials, RESTJSONErrorCodes } from "discord.js";
+import { ActivityType, Client, DiscordAPIError, GatewayIntentBits, GuildScheduledEventEntityType, GuildScheduledEventPrivacyLevel, GuildScheduledEventStatus, Partials, RESTJSONErrorCodes } from "discord.js";
 
 export const DISCORD_MAX_MESSAGE_LENGTH = 2000;
 
@@ -82,6 +82,39 @@ export const sendSafeMessage = async (channel: SendableChannels, content: string
   allowedMentions: { parse: [], users: userIds },
   components,
 });
+
+/** Discord event announcing a hearing in the hearings voice channel, null when none is configured or when Discord refuses (the hearing then goes on without an event) */
+export const createHearingEvent = async (guild: Guild, input: { name: string; description: string; startsAt: Date }): Promise<{ id: string; url: string } | null> => {
+  if (env.DISCORD_TRIAL_VOICE_CHANNEL_ID === "") return null;
+
+  try {
+    const event = await guild.scheduledEvents.create({
+      name: sanitizeDiscordMessage(input.name).slice(0, 100),
+      description: sanitizeDiscordMessage(input.description).slice(0, 1000),
+      scheduledStartTime: input.startsAt,
+      privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly,
+      entityType: GuildScheduledEventEntityType.Voice,
+      channel: env.DISCORD_TRIAL_VOICE_CHANNEL_ID,
+    });
+    return { id: event.id, url: event.url };
+  }
+  catch (error) {
+    logger.warn(`Could not create the hearing event: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+};
+
+/** Best effort: a failure is logged and never blocks the trial */
+export const setHearingEventStatus = async (guild: Guild, eventId: string, status: "active" | "completed" | "canceled"): Promise<void> => {
+  try {
+    if (status === "active") await guild.scheduledEvents.edit(eventId, { status: GuildScheduledEventStatus.Active });
+    else if (status === "completed") await guild.scheduledEvents.edit(eventId, { status: GuildScheduledEventStatus.Completed });
+    else await guild.scheduledEvents.edit(eventId, { status: GuildScheduledEventStatus.Canceled });
+  }
+  catch (error) {
+    logger.warn(`Could not set the hearing event ${eventId} to ${status}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
 
 export const startDiscordTyping = (channel: SendableChannels, onError: () => void) => {
   const sendTyping = async () => {
