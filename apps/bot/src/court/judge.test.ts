@@ -87,11 +87,11 @@ describe("formatVerdictLine", () => {
   it("states the code's verdict, votes, reversal and sentence", () => {
     assert.equal(
       formatVerdictLine({ guilty: true, reversed: true, coinFlip: false, guiltyVotes: 1, innocentVotes: 3 }, "100 pompes"),
-      "⚖️ Verdict officiel : COUPABLE (1 voix contre 3, renversé par le juge). Peine : 100 pompes",
+      "Verdict officiel : COUPABLE (1 voix contre 3, renversé par le juge). Peine : 100 pompes",
     );
     assert.equal(
       formatVerdictLine({ guilty: false, reversed: false, coinFlip: true, guiltyVotes: 0, innocentVotes: 0 }, null),
-      "⚖️ Verdict officiel : NON COUPABLE (0 voix contre 0, pile ou face).",
+      "Verdict officiel : NON COUPABLE (0 voix contre 0, pile ou face).",
     );
   });
 });

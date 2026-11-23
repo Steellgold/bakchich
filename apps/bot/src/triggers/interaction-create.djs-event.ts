@@ -1,10 +1,11 @@
 import type { VoteResult } from "#/court/engine";
 import { court } from "#/court/court";
+import { EMOJI } from "#/court/emojis";
 import { upsertMember } from "#/court/members";
 import { trigger } from "#/utils/trigger";
 import { MessageFlags } from "discord.js";
 
-const TRIAL_OVER = "Ce procès est terminé.";
+const TRIAL_OVER = `${EMOJI.hourglass} Ce procès est terminé.`;
 
 trigger.discordEvent("interactionCreate", async (interaction) => {
   if (!interaction.isButton() || !interaction.customId.startsWith("vote:")) return;
@@ -20,8 +21,8 @@ trigger.discordEvent("interactionCreate", async (interaction) => {
 
   const guilty = choice === "guilty";
   const answers: Record<VoteResult, string> = {
-    "ok": `Vote enregistré : ${guilty ? "Coupable" : "Non coupable"}.`,
-    "not-allowed": "L'accusé et le plaignant ne votent pas.",
+    "ok": `${EMOJI.ballotBox} Vote enregistré : ${guilty ? "Coupable" : "Non coupable"}.`,
+    "not-allowed": `${EMOJI.cross} L'accusé et le plaignant ne votent pas.`,
     "closed": TRIAL_OVER,
     "no-trial": TRIAL_OVER,
   };

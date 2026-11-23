@@ -2,6 +2,7 @@ import type { Member } from "#/court/engine";
 import type { Message } from "discord.js";
 import { parseCommand } from "#/court/command";
 import { court, judge } from "#/court/court";
+import { EMOJI } from "#/court/emojis";
 import { pickLawyer } from "#/court/engine";
 import { upsertMember } from "#/court/members";
 import { fetchRecord } from "#/court/record";
@@ -23,24 +24,24 @@ const authorName = (message: Message) => message.member?.displayName ?? message.
 
 const openTrial = async (message: Message<true>, accusedId: string, crime: string, botId: string) => {
   if (court.get(message.channelId) !== undefined) {
-    await reply(message, "La cour est occupée, revenez plus tard.");
+    await reply(message, `${EMOJI.hourglass} La cour est occupée, revenez plus tard.`);
     return;
   }
 
   const accused = await findDiscordGuildMember(message.guild, accusedId);
   if (accused === null) {
-    await reply(message, "Cet individu est inconnu du Royaume.");
+    await reply(message, `${EMOJI.documentSearch} Cet individu est inconnu du Royaume.`);
     return;
   }
   if (accused.user.bot && accused.id !== botId) {
-    await reply(message, "La cour ne juge pas les machines. Sauf elle-même.");
+    await reply(message, `${EMOJI.courthouse} La cour ne juge pas les machines. Sauf elle-même.`);
     return;
   }
 
   const recent = await fetchRecentHumanMessages(message.channel, LAWYER_LOOKUP_MESSAGES);
   const screening = await judge.screen(crime, accused.displayName, recent.lines.slice(-CONTEXT_MESSAGES));
   if (!screening.ok) {
-    await reply(message, screening.reply);
+    await reply(message, `${EMOJI.alertShield} ${screening.reply}`);
     return;
   }
 
@@ -50,7 +51,7 @@ const openTrial = async (message: Message<true>, accusedId: string, crime: strin
 
   const trial = court.open({ channelId: message.channelId, accused: { id: accused.id, name: accused.displayName }, plaintiff, lawyer, crime });
   if (trial === "busy") {
-    await reply(message, "La cour est occupée, revenez plus tard.");
+    await reply(message, `${EMOJI.hourglass} La cour est occupée, revenez plus tard.`);
     return;
   }
 
@@ -61,7 +62,7 @@ const openTrial = async (message: Message<true>, accusedId: string, crime: strin
 const showRecord = async (message: Message<true>, targetId: string) => {
   const target = await findDiscordGuildMember(message.guild, targetId);
   const entries = await fetchRecord(targetId);
-  await reply(message, await judge.record(target?.displayName ?? "Cet individu", entries));
+  await reply(message, `${EMOJI.sealedScroll} ${await judge.record(target?.displayName ?? "Cet individu", entries)}`);
 };
 
 trigger.discordEvent("messageCreate", async (message) => {
@@ -74,7 +75,7 @@ trigger.discordEvent("messageCreate", async (message) => {
 
   // Outside the AGENTS category, the bot only answers explicit mentions:
   if (getCategoryId(message.channel) !== AGENTS_CATEGORY_ID) {
-    if (mentioned) await reply(message, "Le Tribunal ne siège que dans la catégorie AGENTS.");
+    if (mentioned) await reply(message, `${EMOJI.courthouse} Le Tribunal ne siège que dans la catégorie AGENTS.`);
     return;
   }
 
@@ -88,7 +89,7 @@ trigger.discordEvent("messageCreate", async (message) => {
 
     const recent = await fetchRecentHumanMessages(message.channel, CONTEXT_MESSAGES);
     const intervention = await judge.intervene(trial, recent.lines);
-    await message.channel.send({ content: sanitizeDiscordMessage(intervention), allowedMentions: { parse: [] } });
+    await message.channel.send({ content: sanitizeDiscordMessage(`${EMOJI.judge} ${intervention}`), allowedMentions: { parse: [] } });
     court.say(message.channelId, null, intervention);
     return;
   }
@@ -107,7 +108,7 @@ trigger.discordEvent("messageCreate", async (message) => {
     return;
   }
   if (command?.kind === "invalid-crime") {
-    await reply(message, "Motif invalide : entre 1 et 200 caractères.");
+    await reply(message, `${EMOJI.cross} Motif invalide : entre 1 et 200 caractères.`);
     return;
   }
 

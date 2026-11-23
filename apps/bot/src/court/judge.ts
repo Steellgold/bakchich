@@ -62,7 +62,7 @@ const formatRecordEntry = (entry: RecordEntry) => `- ${entry.createdAt.toLocaleD
 export const formatVerdictLine = (verdict: Verdict, sentence: string | null): string => {
   const how = verdict.reversed ? "renversé par le juge" : verdict.coinFlip ? "pile ou face" : "";
   const details = `${String(verdict.guiltyVotes)} voix contre ${String(verdict.innocentVotes)}${how === "" ? "" : `, ${how}`}`;
-  return `⚖️ Verdict officiel : ${verdict.guilty ? "COUPABLE" : "NON COUPABLE"} (${details}).${sentence === null ? "" : ` Peine : ${sentence}`}`;
+  return `Verdict officiel : ${verdict.guilty ? "COUPABLE" : "NON COUPABLE"} (${details}).${sentence === null ? "" : ` Peine : ${sentence}`}`;
 };
 
 const firstWordIs = (text: string, word: string) => (text.split(/\s+/u)[0] ?? "").replace(/[^\p{L}]/gu, "").toLowerCase() === word;
