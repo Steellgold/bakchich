@@ -22,8 +22,10 @@ export const RoomClient = ({ url }: { url: string }) => {
   if (rejected !== null) {
     return (
       <main className="home">
-        <p>{rejected}</p>
-        <Link className="button" href="/">Retour</Link>
+        <div className="card">
+          <p>{rejected}</p>
+          <Link className="button" href="/">Retour</Link>
+        </div>
       </main>
     );
   }
