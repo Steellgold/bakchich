@@ -3,7 +3,7 @@ import type { Message } from "discord.js";
 import { parseCommand } from "#/court/command";
 import { court, judge } from "#/court/court";
 import { EMOJI } from "#/court/emojis";
-import { pickLawyer } from "#/court/engine";
+import { formatNames, MAX_ACCUSED, pickLawyer } from "#/court/engine";
 import { upsertMember } from "#/court/members";
 import { fetchRecord } from "#/court/record";
 import { AGENTS_CATEGORY_ID, discordClient, fetchRecentHumanMessages, findDiscordGuildMember, getCategoryId, sanitizeDiscordMessage, startDiscordTyping } from "#/integrations/discord";
@@ -22,24 +22,30 @@ const reply = async (message: Message, content: string) => message.reply({
 
 const authorName = (message: Message) => message.member?.displayName ?? message.author.username;
 
-const openTrial = async (message: Message<true>, accusedId: string, crime: string, botId: string) => {
+const openTrial = async (message: Message<true>, accusedIds: string[], crime: string, botId: string) => {
   if (court.get(message.channelId) !== undefined) {
     await reply(message, `${EMOJI.hourglass} La cour est occupée, revenez plus tard.`);
     return;
   }
 
-  const accused = await findDiscordGuildMember(message.guild, accusedId);
-  if (accused === null) {
-    await reply(message, `${EMOJI.documentSearch} Cet individu est inconnu du Royaume.`);
+  if (accusedIds.length > MAX_ACCUSED) {
+    await reply(message, `${EMOJI.courthouse} La cour ne juge pas plus de ${String(MAX_ACCUSED)} individus à la fois.`);
     return;
   }
-  if (accused.user.bot && accused.id !== botId) {
+
+  const found = await Promise.all(accusedIds.map(async (id) => findDiscordGuildMember(message.guild, id)));
+  const accused = found.filter((member) => member !== null);
+  if (accused.length !== found.length) {
+    await reply(message, `${EMOJI.documentSearch} ${accused.length === 0 ? "Cet individu est inconnu" : "Un de ces individus est inconnu"} du Royaume.`);
+    return;
+  }
+  if (accused.some((member) => member.user.bot && member.id !== botId)) {
     await reply(message, `${EMOJI.courthouse} La cour ne juge pas les machines. Sauf elle-même.`);
     return;
   }
 
   const recent = await fetchRecentHumanMessages(message.channel, LAWYER_LOOKUP_MESSAGES);
-  const screening = await judge.screen(crime, accused.displayName, recent.lines.slice(-CONTEXT_MESSAGES));
+  const screening = await judge.screen(crime, formatNames(accused.map((member) => member.displayName)), recent.lines.slice(-CONTEXT_MESSAGES));
   if (!screening.ok) {
     await reply(message, `${EMOJI.alertShield} ${screening.reply}`);
     return;
@@ -47,15 +53,15 @@ const openTrial = async (message: Message<true>, accusedId: string, crime: strin
 
   const plaintiff: Member = { id: message.author.id, name: authorName(message) };
   const candidates = recent.authors.filter((author) => author.createdTimestamp > Date.now() - LAWYER_WINDOW_MS);
-  const lawyer = pickLawyer(candidates, [accused.id, plaintiff.id, botId], Math.random);
+  const lawyer = pickLawyer(candidates, [...accused.map((member) => member.id), plaintiff.id, botId], Math.random);
 
-  const trial = court.open({ channelId: message.channelId, accused: { id: accused.id, name: accused.displayName }, plaintiff, lawyer, crime });
+  const trial = court.open({ channelId: message.channelId, accused: accused.map((member) => ({ id: member.id, name: member.displayName })), plaintiff, lawyer, crime });
   if (trial === "busy") {
     await reply(message, `${EMOJI.hourglass} La cour est occupée, revenez plus tard.`);
     return;
   }
 
-  await upsertMember({ id: accused.id, name: accused.displayName, avatarUrl: accused.displayAvatarURL({ extension: "png", size: 128 }) });
+  await Promise.all(accused.map(async (member) => upsertMember({ id: member.id, name: member.displayName, avatarUrl: member.displayAvatarURL({ extension: "png", size: 128 }) })));
   if (lawyer !== null) await upsertMember({ ...lawyer, avatarUrl: null });
 };
 
@@ -101,7 +107,7 @@ trigger.discordEvent("messageCreate", async (message) => {
 
   if (command?.kind === "trial") {
     const stopTyping = startDiscordTyping(message.channel, () => logger.warn("Could not send the typing indicator"));
-    await openTrial(message, command.accusedId, command.crime, botUser.id).finally(stopTyping);
+    await openTrial(message, command.accusedIds, command.crime, botUser.id).finally(stopTyping);
     return;
   }
   if (command?.kind === "record") {

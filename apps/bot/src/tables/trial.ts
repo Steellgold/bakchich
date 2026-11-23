@@ -5,8 +5,6 @@ import { boolean, integer, pgTable, text, uuid } from "drizzle-orm/pg-core";
 export const tableTrial = pgTable("trial", {
   id: uuid("id").primaryKey().defaultRandom(),
   channelId: text("channel_id").notNull(),
-  accusedId: text("accused_id").notNull(),
-  accusedName: text("accused_name").notNull(),
   plaintiffId: text("plaintiff_id").notNull(),
   plaintiffName: text("plaintiff_name").notNull(),
   lawyerId: text("lawyer_id"),

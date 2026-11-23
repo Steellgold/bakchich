@@ -2,7 +2,6 @@ import type { Trial } from "#/court/engine";
 import type { KnownMember } from "#/court/members";
 import type { RoomMember } from "#/room/access";
 import type { Npc, ServerMessage, TrialView } from "#/room/protocol";
-import type { Role } from "#/room/world";
 import type { IncomingMessage } from "node:http";
 import type { RawData } from "ws";
 import { court } from "#/court/court";
@@ -101,9 +100,13 @@ const trialView = (trial: Trial): TrialView => ({
 // Absent convoked players of the displayed trial, shown in their seats. Anyone else who is not connected is not in the room.
 const npcs = (): Npc[] => {
   const avatarOf = (id: string) => knownMembers.find((member) => member.id === id)?.avatarUrl ?? null;
-  const roles: [Role, { id: string; name: string } | null | undefined][] = [["accused", displayed?.accused], ["prosecutor", displayed?.plaintiff], ["defense", displayed?.lawyer]];
+  const convened: [{ id: string; name: string } | null | undefined, string | undefined][] = [
+    ...(displayed?.accused ?? []).map((member, index): [{ id: string; name: string }, string | undefined] => [member, SEATS.accused[index]?.id]),
+    [displayed?.plaintiff, SEATS.prosecutor.id],
+    [displayed?.lawyer, SEATS.defense.id],
+  ];
 
-  return roles.flatMap(([role, member]) => (member === null || member === undefined || sockets.has(member.id) ? [] : [{ ...member, avatarUrl: avatarOf(member.id), seatId: SEATS[role].id }]));
+  return convened.flatMap(([member, seatId]) => (member === null || member === undefined || seatId === undefined || sockets.has(member.id) ? [] : [{ ...member, avatarUrl: avatarOf(member.id), seatId }]));
 };
 
 const handleMessage = (member: RoomMember, socket: WebSocket, raw: string) => {

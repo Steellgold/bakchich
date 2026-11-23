@@ -8,7 +8,7 @@ import { describe, it } from "node:test";
 const trialFor = (id: string, accusedId: string, startedAt: number): Trial => ({
   id,
   channelId: `channel-${id}`,
-  accused: { id: accusedId, name: "Accusé" },
+  accused: [{ id: accusedId, name: "Accusé" }],
   plaintiff: { id: "plaintiff", name: "Plaignant" },
   lawyer: { id: "lawyer", name: "Avocat" },
   crime: "vol de croissant",
@@ -66,7 +66,7 @@ describe("World.move", () => {
     join(world, "accused");
     world.setTrial(trialFor("t1", "accused", 1));
     world.standUp("accused");
-    const seat = SEATS.accused.position;
+    const seat = SEATS.accused[0]?.position ?? ROOM.spawn;
     const target = { x: seat.x + 0.5, z: seat.z + 0.5 };
 
     world.move("accused", target, 0, 100_000);
@@ -205,8 +205,8 @@ describe("World benches", () => {
 
     world.setTrial(trialFor("t2", "spectator", 2));
     assert.equal(player(world, "spectator")?.role, "accused");
-    assert.equal(player(world, "spectator")?.seatId, SEATS.accused.id);
-    assert.deepEqual(player(world, "spectator")?.position, SEATS.accused.position);
+    assert.equal(player(world, "spectator")?.seatId, SEATS.accused[0]?.id);
+    assert.deepEqual(player(world, "spectator")?.position, SEATS.accused[0]?.position);
 
     join(world, "next");
     world.move("next", approach, 0, 100_000);
@@ -244,7 +244,7 @@ describe("World.setTrial", () => {
 
     world.setTrial(trialFor("t1", "accused", 1));
     assert.equal(player(world, "accused")?.role, "accused");
-    assert.equal(player(world, "accused")?.seatId, SEATS.accused.id);
+    assert.equal(player(world, "accused")?.seatId, SEATS.accused[0]?.id);
 
     world.setTrial(trialFor("t2", "someone-else", 2));
     assert.equal(player(world, "accused")?.role, null);

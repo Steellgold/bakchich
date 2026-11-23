@@ -7,7 +7,7 @@ import { describe, it, mock } from "node:test";
 const trial: Trial = {
   id: "t1",
   channelId: "c1",
-  accused: { id: "1", name: "Kevin" },
+  accused: [{ id: "1", name: "Kevin" }],
   plaintiff: { id: "2", name: "Paul" },
   lawyer: { id: "3", name: "Dave" },
   crime: "vol de croissant",

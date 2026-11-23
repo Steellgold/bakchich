@@ -1,12 +1,13 @@
 import { normalizeCrime } from "./engine";
 
 export type Command
-  = | { kind: "trial"; accusedId: string; crime: string }
+  = | { kind: "trial"; accusedIds: string[]; crime: string }
     | { kind: "record"; targetId: string }
     | { kind: "invalid-crime" }
     | null;
 
-const trialPattern = /^proc[eè]s\s+(?:[aà]\s+)?<@!?(\d+)>\s+pour\s+(.+)$/isu;
+// One or more mentions, separated by spaces, commas or « et »:
+const trialPattern = /^proc[eè]s\s+(?:[aà]\s+)?((?:<@!?\d+>[\s,]*(?:et\s+)?)+)pour\s+(.+)$/isu;
 const recordPattern = /^casier\s+<@!?(\d+)>$/iu;
 
 /** Parse a raw message starting with the bot mention into a court command */
@@ -16,7 +17,8 @@ export const parseCommand = (content: string, botId: string): Command => {
   const trial = trialPattern.exec(text);
   if (trial?.[1] !== undefined && trial[2] !== undefined) {
     const crime = normalizeCrime(trial[2]);
-    return crime === null ? { kind: "invalid-crime" } : { kind: "trial", accusedId: trial[1], crime };
+    const accusedIds = [...new Set([...trial[1].matchAll(/<@!?(\d+)>/gu)].map((match) => match[1] ?? ""))];
+    return crime === null ? { kind: "invalid-crime" } : { kind: "trial", accusedIds, crime };
   }
 
   const record = recordPattern.exec(text);

@@ -14,7 +14,7 @@ export type PlayerState = {
   role: Role | null;
 };
 
-const ROLE_SEATS: Record<Role, Seat> = { accused: SEATS.accused, prosecutor: SEATS.prosecutor, defense: SEATS.defense };
+const ROLE_SEATS: Record<"prosecutor" | "defense", Seat> = { prosecutor: SEATS.prosecutor, defense: SEATS.defense };
 const BENCH_REACH = 1.25;
 
 /** The closest bench seat within reach that no connected player is using. */
@@ -45,7 +45,7 @@ export const canStand = (point: Vec2, hasRole: boolean): boolean => insideRoom(p
 
 const roleOf = (trial: Trial | null, id: string): Role | null => {
   if (trial === null) return null;
-  if (trial.accused.id === id) return "accused";
+  if (trial.accused.some((member) => member.id === id)) return "accused";
   if (trial.plaintiff.id === id) return "prosecutor";
   if (trial.lawyer?.id === id) return "defense";
   return null;
@@ -151,8 +151,11 @@ export class World {
     const role = roleOf(this.trial, state.id);
     if (role === null) return;
 
+    const seat = role === "accused" ? SEATS.accused[this.trial?.accused.findIndex((member) => member.id === state.id) ?? -1] : ROLE_SEATS[role];
+    if (seat === undefined) return;
+
     state.role = role;
-    this.sit(state, ROLE_SEATS[role]);
+    this.sit(state, seat);
   }
 
   private sit(state: PlayerState, seat: Seat): void {

@@ -6,16 +6,16 @@ describe("parseCommand", () => {
   it("parses a trial command", () => {
     assert.deepEqual(
       parseCommand("<@42> procès <@7> pour avoir mangé le dernier croissant", "42"),
-      { kind: "trial", accusedId: "7", crime: "avoir mangé le dernier croissant" },
+      { kind: "trial", accusedIds: ["7"], crime: "avoir mangé le dernier croissant" },
     );
   });
 
   it("accepts any case, no accent and nickname mentions", () => {
-    assert.deepEqual(parseCommand("<@!42> PROCES <@!7> pour vol", "42"), { kind: "trial", accusedId: "7", crime: "vol" });
+    assert.deepEqual(parseCommand("<@!42> PROCES <@!7> pour vol", "42"), { kind: "trial", accusedIds: ["7"], crime: "vol" });
   });
 
   it("accepts the optional preposition with or without an accent", () => {
-    const expected = { kind: "trial", accusedId: "7", crime: "pensés bizzares" };
+    const expected = { kind: "trial", accusedIds: ["7"], crime: "pensés bizzares" };
     assert.deepEqual(parseCommand("<@42> procès à <@7> pour pensés bizzares", "42"), expected);
     assert.deepEqual(parseCommand("<@42> proces a <@7> pour pensés bizzares", "42"), expected);
   });

@@ -5,6 +5,7 @@ export const DEBATE_MS = 5 * 60_000;
 export const VOTE_MS = 2 * 60_000;
 export const REVERSAL_CHANCE = 0.15;
 export const MAX_CRIME_LENGTH = 200;
+export const MAX_ACCUSED = 5;
 
 export type Member = { id: string; name: string };
 export type Phase = "debate" | "vote";
@@ -12,7 +13,7 @@ export type Phase = "debate" | "vote";
 export type Trial = {
   id: string;
   channelId: string;
-  accused: Member;
+  accused: Member[];
   plaintiff: Member;
   lawyer: Member | null;
   crime: string;
@@ -37,6 +38,9 @@ export type CourtEvent
     | { type: "speech"; trial: Trial; speakerId: string | null; text: string };
 
 export type VoteResult = "ok" | "not-allowed" | "closed" | "no-trial";
+
+/** "A", "A et B" or "A, B et C" */
+export const formatNames = (names: string[]): string => (names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} et ${names.at(-1) ?? ""}`);
 
 /** Trimmed crime, or null when empty or longer than MAX_CRIME_LENGTH */
 export const normalizeCrime = (crime: string): string | null => {
@@ -89,7 +93,7 @@ export class Court extends EventEmitter<{ event: [CourtEvent] }> {
     if (trial !== undefined) this.emit("event", { type: "speech", trial, speakerId, text });
   }
 
-  public open(input: { channelId: string; accused: Member; plaintiff: Member; lawyer: Member | null; crime: string }): Trial | "busy" {
+  public open(input: { channelId: string; accused: Member[]; plaintiff: Member; lawyer: Member | null; crime: string }): Trial | "busy" {
     if (this.states.has(input.channelId)) return "busy";
 
     const trial: Trial = { ...input, id: randomUUID(), phase: "debate", votes: new Map(), startedAt: new Date(), phaseEndsAt: Date.now() + DEBATE_MS };
@@ -114,7 +118,7 @@ export class Court extends EventEmitter<{ event: [CourtEvent] }> {
     const trial = this.get(channelId);
     if (trial === undefined) return "no-trial";
     if (trial.phase !== "vote") return "closed";
-    if (voterId === trial.accused.id || voterId === trial.plaintiff.id) return "not-allowed";
+    if (trial.accused.some((member) => member.id === voterId) || voterId === trial.plaintiff.id) return "not-allowed";
 
     trial.votes.set(voterId, guilty);
     this.emit("event", { type: "vote-cast", trial });

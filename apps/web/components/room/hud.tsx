@@ -3,6 +3,7 @@
 import type { NearbyInteraction } from "./player-controller";
 import type { VoteResult } from "@tribunal/bot/court/engine";
 import type { ClientMessage, TrialView } from "@tribunal/bot/room/protocol";
+import { formatNames } from "@tribunal/bot/court/engine";
 import { useEffect, useState } from "react";
 
 const VOTE_RESULTS: Record<VoteResult, string> = {
@@ -44,7 +45,7 @@ export const Hud = ({ trial, verdict, voteResult, interaction, seated, send }: H
       <div className="hud-panel">
         {trial === null ? <strong>Audience suspendue</strong> : (
           <>
-            <strong>{`Le peuple contre ${trial.accused.name}`}</strong>
+            <strong>{`Le peuple contre ${formatNames(trial.accused.map((member) => member.name))}`}</strong>
             <span>{`Crime : « ${trial.crime} »`}</span>
             <span>{`${trial.phase === "debate" ? "Débats" : "Vote"} : ${formatCountdown(trial.endsAt, now)}`}</span>
           </>

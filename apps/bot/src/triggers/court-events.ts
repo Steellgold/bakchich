@@ -24,7 +24,7 @@ const verdictEmojis = (verdict: Verdict) => [
   ...(verdict.coinFlip ? [EMOJI.justiceCoin] : []),
 ].join(" ");
 
-const involvedIds = (trial: Trial) => [trial.accused.id, trial.plaintiff.id, ...(trial.lawyer === null ? [] : [trial.lawyer.id])];
+const involvedIds = (trial: Trial) => [...trial.accused.map((member) => member.id), trial.plaintiff.id, ...(trial.lawyer === null ? [] : [trial.lawyer.id])];
 
 const voteButtons = (trialId: string, disabled: boolean) => [
   new ActionRowBuilder<ButtonBuilder>().addComponents(

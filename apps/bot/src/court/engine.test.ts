@@ -17,7 +17,7 @@ const kevin: Member = { id: "1", name: "Kevin" };
 const paul: Member = { id: "2", name: "Paul" };
 const lawyer: Member = { id: "3", name: "Maître Dave" };
 
-const openInput = (channelId = "c1") => ({ channelId, accused: kevin, plaintiff: paul, lawyer, crime: "vol de croissant" });
+const openInput = (channelId = "c1") => ({ channelId, accused: [kevin], plaintiff: paul, lawyer, crime: "vol de croissant" });
 
 describe("normalizeCrime", () => {
   it("trims and keeps valid crimes", () => {

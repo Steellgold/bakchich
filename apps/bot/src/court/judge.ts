@@ -1,5 +1,5 @@
 import type { RecordEntry, Trial, Verdict } from "./engine";
-import { DEBATE_MS } from "./engine";
+import { DEBATE_MS, formatNames } from "./engine";
 import dedent from "dedent";
 
 /** Text generator: instructions (persona) and prompt in, text out */
@@ -27,6 +27,11 @@ const screenInstructions = dedent`
 `;
 
 const minutes = (ms: number) => Math.round(ms / 60_000);
+
+const accusedNames = (trial: Trial) => formatNames(trial.accused.map((member) => member.name));
+
+// French agreement for the canned texts, one accused or a group:
+const isGroup = (trial: Trial) => trial.accused.length > 1;
 
 // The only low-level error handler: any failure or timeout of the generator falls back to canned text.
 const ask = async (generate: Generate, instructions: string, prompt: string, fallback: string): Promise<string> => {
@@ -72,30 +77,30 @@ export const createJudge = (generate: Generate) => ({
     const defense = trial.lawyer === null ? "pas d'avocat (nobody available)" : `court-appointed lawyer: ${trial.lawyer.name}`;
     return ask(generate, persona, dedent`
       Open the trial by reading the indictment dramatically.
-      Accused: ${trial.accused.name}. Prosecutor (plaintiff): ${trial.plaintiff.name}. Defense: ${defense}.
+      Accused: ${accusedNames(trial)}. Prosecutor (plaintiff): ${trial.plaintiff.name}. Defense: ${defense}.
       Crime: « ${trial.crime} ».
       Announce that the debate lasts ${String(minutes(DEBATE_MS))} minutes and that everyone can plead in the channel.
-    `, `Oyez, oyez ! ${trial.accused.name} est accusé de « ${trial.crime} » par ${trial.plaintiff.name}. Défense : ${trial.lawyer?.name ?? "aucune, débrouille-toi"}. Les débats sont ouverts pour ${String(minutes(DEBATE_MS))} minutes.`);
+    `, `Oyez, oyez ! ${accusedNames(trial)} ${isGroup(trial) ? "sont accusés" : "est accusé"} de « ${trial.crime} » par ${trial.plaintiff.name}. Défense : ${trial.lawyer?.name ?? "aucune, débrouille-toi"}. Les débats sont ouverts pour ${String(minutes(DEBATE_MS))} minutes.`);
   },
 
   intervene: async (trial: Trial, recentMessages: string[]): Promise<string> => ask(generate, persona, dedent`
-    Trial of ${trial.accused.name} for « ${trial.crime} ». Here are the latest pleas:
+    Trial of ${accusedNames(trial)} for « ${trial.crime} ». Here are the latest pleas:
     ${recentMessages.join("\n")}
     Intervene in one or two sentences: objection sustained or overruled, biased remark, threat of contempt of court.
   `, "Silence dans la salle ! La cour a faim, accélérez."),
 
   sentence: async (trial: Trial): Promise<string> => ask(generate, persona, dedent`
-    ${trial.accused.name} is found guilty of « ${trial.crime} ».
+    ${accusedNames(trial)} ${isGroup(trial) ? "are" : "is"} found guilty of « ${trial.crime} ».
     Make up a single absurd and harmless sentence (punishment), in one short French sentence, and nothing else.
   `, "Porter une couronne en carton pendant une semaine."),
 
   verdict: async (trial: Trial, verdict: Verdict, sentence: string | null, recentMessages: string[]): Promise<string> => ask(generate, persona, dedent`
-    Deliver the verdict of the trial of ${trial.accused.name} for « ${trial.crime} », complaint filed by ${trial.plaintiff.name}.
+    Deliver the verdict of the trial of ${accusedNames(trial)} for « ${trial.crime} », complaint filed by ${trial.plaintiff.name}.
     Sum up the debate in one mocking sentence:
     ${recentMessages.join("\n")}
     ${describeVerdict(verdict)}
-    ${sentence === null ? "No sentence: the accused walks free." : `Sentence pronounced: ${sentence}`}
-  `, `La cour a délibéré : ${trial.accused.name} est ${verdict.guilty ? "COUPABLE" : "NON COUPABLE"}${verdict.reversed ? " (le juge a renversé le vote, parce que)" : ""}.${sentence === null ? "" : ` Peine : ${sentence}`}`),
+    ${sentence === null ? "No sentence: the accused walk free." : `Sentence pronounced: ${sentence}`}
+  `, `La cour a délibéré : ${accusedNames(trial)} ${isGroup(trial) ? "sont" : "est"} ${verdict.guilty ? "COUPABLE" : "NON COUPABLE"}${isGroup(trial) ? "S" : ""}${verdict.reversed ? " (le juge a renversé le vote, parce que)" : ""}.${sentence === null ? "" : ` Peine : ${sentence}`}`),
 
   record: async (target: string, entries: RecordEntry[]): Promise<string> => {
     const lines = entries.length === 0 ? `${target} a un casier vierge. Suspect.` : `Casier de ${target} :\n${entries.map(formatRecordEntry).join("\n")}`;
