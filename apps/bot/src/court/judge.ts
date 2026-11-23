@@ -107,8 +107,8 @@ export const createJudge = (generate: Generate) => ({
 
   chat: async (authorName: string, message: string): Promise<string> => ask(generate, persona, dedent`
     ${authorName} talks to you outside of any trial: « ${message} ».
-    Answer in character, then remind the two commands: « procès @membre pour <crime> » and « casier @membre ».
-  `, "La cour ne reçoit que deux requêtes : « procès @membre pour <crime> » et « casier @membre »."),
+    Answer in character, then remind the two commands: « procès à @membre pour <crime> » and « casier @membre ».
+  `, "La cour ne reçoit que deux requêtes : « procès à @membre pour <crime> » et « casier @membre »."),
 
   screen: async (crime: string, accusedName: string, recentMessages: string[]): Promise<ScreenResult> => {
     const answer = await ask(generate, screenInstructions, dedent`

@@ -6,7 +6,7 @@ export type Command
     | { kind: "invalid-crime" }
     | null;
 
-const trialPattern = /^proc[eè]s\s+<@!?(\d+)>\s+pour\s+(.+)$/isu;
+const trialPattern = /^proc[eè]s\s+(?:[aà]\s+)?<@!?(\d+)>\s+pour\s+(.+)$/isu;
 const recordPattern = /^casier\s+<@!?(\d+)>$/iu;
 
 /** Parse a raw message starting with the bot mention into a court command */
