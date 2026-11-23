@@ -15,5 +15,6 @@ await discordClientStart(async () => {
   await import("#/triggers/message-create.djs-event");
   await import("#/triggers/interaction-create.djs-event");
   await import("#/triggers/court-events");
+  await import("#/triggers/hearings");
   await import("#/triggers/room-server");
 });

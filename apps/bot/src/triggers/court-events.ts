@@ -6,6 +6,7 @@ import { VOTE_MS } from "#/court/engine";
 import { formatVerdictLine } from "#/court/judge";
 import { saveTrial } from "#/court/record";
 import { fetchDiscordSendableChannel, fetchRecentHumanMessages, sendSafeMessage, startDiscordTyping } from "#/integrations/discord";
+import { completeHearingEvent } from "#/triggers/hearings";
 import { attempt } from "#/utils/attempt";
 import { logger } from "#/utils/logger";
 import { trigger } from "#/utils/trigger";
@@ -69,6 +70,7 @@ const handleEvent = async (event: CourtEvent) => {
   const text = await judge.verdict(trial, event.verdict, sentence, recent.lines).finally(stopTyping);
 
   await sendSafeMessage(channel, `${text}\n\n${verdictEmojis(event.verdict)} ${formatVerdictLine(event.verdict, sentence)}`, involvedIds(trial));
+  await attempt(async () => completeHearingEvent(trial.channelId));
   logger.info(`Trial ${trial.id} closed: ${event.verdict.guilty ? "guilty" : "not guilty"}${event.verdict.reversed ? " (reversed)" : ""}`);
 };
 
