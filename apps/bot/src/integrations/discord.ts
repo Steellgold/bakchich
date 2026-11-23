@@ -1,7 +1,7 @@
 import type { Channel, Guild, GuildMember, Message, MessageCreateOptions, SendableChannels } from "discord.js";
 import { env } from "#/utils/env";
 import { logger } from "#/utils/logger";
-import { ActivityType, ChannelType, Client, DiscordAPIError, GatewayIntentBits, GuildScheduledEventEntityType, GuildScheduledEventPrivacyLevel, GuildScheduledEventStatus, Partials, RESTJSONErrorCodes } from "discord.js";
+import { ActivityType, ApplicationCommandType, ChannelType, Client, DiscordAPIError, GatewayIntentBits, GuildScheduledEventEntityType, GuildScheduledEventPrivacyLevel, GuildScheduledEventStatus, Partials, RESTJSONErrorCodes } from "discord.js";
 
 export const DISCORD_MAX_MESSAGE_LENGTH = 2000;
 
@@ -145,6 +145,19 @@ export const createPreparationRoom = async (guild: Guild, input: { name: string;
   catch (error) {
     logger.warn(`Could not create the preparation room: ${error instanceof Error ? error.message : String(error)}`);
     return null;
+  }
+};
+
+/** Register a message command (right click on a message, Applications) in each allowed guild; creating it again with the same name updates it. Best effort, logged. */
+export const registerMessageCommand = async (name: string): Promise<void> => {
+  for (const guildId of GUILD_IDS) {
+    try {
+      const guild = await discordClient.guilds.fetch(guildId);
+      await guild.commands.create({ name, type: ApplicationCommandType.Message });
+    }
+    catch (error) {
+      logger.warn(`Could not register the "${name}" command in guild ${guildId}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 };
 

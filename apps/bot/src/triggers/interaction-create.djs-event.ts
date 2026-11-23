@@ -1,12 +1,15 @@
 import type { VoteResult } from "#/court/engine";
-import type { ButtonInteraction, UserSelectMenuInteraction } from "discord.js";
+import type { HearingRequest } from "#/triggers/hearings";
+import type { ButtonInteraction, MessageContextMenuCommandInteraction, ModalSubmitInteraction, UserSelectMenuInteraction } from "discord.js";
 import { court } from "#/court/court";
 import { EMOJI } from "#/court/emojis";
-import { AI_LAWYER } from "#/court/engine";
+import { AI_LAWYER, MAX_CRIME_LENGTH, normalizeCrime } from "#/court/engine";
 import { upsertMember } from "#/court/members";
-import { endPreparation, forceStartAnswers, forceStartHearing, isInHearingVoice, pendingHearing, readyAnswers, setPendingLawyer, voiceChannelOf } from "#/triggers/hearings";
+import { AGENTS_CATEGORY_IDS, conversation, discordClient, getCategoryId, registerMessageCommand, sanitizeDiscordMessage } from "#/integrations/discord";
+import { endPreparation, forceStartAnswers, forceStartHearing, isInHearingVoice, pendingHearing, readyAnswers, requestHearing, setPendingLawyer, voiceChannelOf } from "#/triggers/hearings";
+import { attempt } from "#/utils/attempt";
 import { trigger } from "#/utils/trigger";
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from "discord.js";
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, LabelBuilder, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle } from "discord.js";
 
 const TRIAL_OVER = `${EMOJI.hourglass} Ce procès est terminé.`;
 const NO_HEARING = `${EMOJI.hourglass} Aucune audience n'attend dans ce salon.`;
@@ -58,7 +61,76 @@ const answerLawyer = async (interaction: ButtonInteraction, accepted: boolean, h
   await interaction.update({ content: set ? `${EMOJI.gavel} ${lawyer.name} devient l'avocat de la défense.` : NO_HEARING, components: [] });
 };
 
+/** Right click on a message, Applications: put its author on trial */
+const OPEN_TRIAL_COMMAND = "Ouvrir un procès";
+const OPEN_TRIAL_MODAL = "open-trial";
+const CONTEXT_LENGTH = 300;
+
+/** The message action opens a form asking why: only in an AGENTS category, never against oneself */
+const askOpenTrial = async (interaction: MessageContextMenuCommandInteraction) => {
+  const target = interaction.targetMessage;
+  if (interaction.channel === null || !AGENTS_CATEGORY_IDS.includes(getCategoryId(interaction.channel) ?? "")) {
+    await interaction.reply({ content: `${EMOJI.courthouse} Le Tribunal ne siège que dans la catégorie AGENTS.`, flags: MessageFlags.Ephemeral });
+    return;
+  }
+  if (target.author.id === interaction.user.id) {
+    await interaction.reply({ content: `${EMOJI.courthouse} La cour ne te laisse pas te juger toi-même.`, flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const name = target.member?.displayName ?? target.author.displayName;
+  await interaction.showModal(new ModalBuilder()
+    .setCustomId(`${OPEN_TRIAL_MODAL}:${target.id}`)
+    .setTitle(`Procès de ${name}`.slice(0, 45))
+    .addLabelComponents(new LabelBuilder()
+      .setLabel("Expliquez pourquoi")
+      .setTextInputComponent(new TextInputBuilder().setCustomId("crime").setStyle(TextInputStyle.Paragraph).setPlaceholder("Le crime, en quelques mots").setMinLength(1).setMaxLength(MAX_CRIME_LENGTH).setRequired(true))));
+};
+
+/** The form is sent: same checks and announcement as a trial requested by mentioning the bot, the message being the context */
+const submitOpenTrial = async (interaction: ModalSubmitInteraction, messageId: string | undefined) => {
+  const botUser = discordClient.user;
+  const channel = interaction.channel;
+  if (!interaction.inCachedGuild() || botUser === null || channel === null || !channel.isSendable() || messageId === undefined) {
+    await interaction.reply({ content: `${EMOJI.cross} Ce procès ne peut pas s'ouvrir ici.`, flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const crime = normalizeCrime(interaction.fields.getTextInputValue("crime"));
+  if (crime === null) {
+    await interaction.reply({ content: `${EMOJI.cross} Motif invalide : entre 1 et ${String(MAX_CRIME_LENGTH)} caractères.`, flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  // The checks take several seconds: Discord only waits 3 for an answer.
+  await interaction.deferReply();
+  const answer = async (content: string, components?: Parameters<HearingRequest["reply"]>[1]) => interaction.editReply({ content: sanitizeDiscordMessage(content), allowedMentions: { parse: [] }, components });
+
+  const fetched = await attempt(async () => channel.messages.fetch(messageId));
+  if (!fetched.ok) {
+    await answer(`${EMOJI.documentSearch} Ce message a disparu, la cour ne peut plus le juger.`);
+    return;
+  }
+
+  const target = fetched.value;
+  const plaintiff = { id: interaction.user.id, name: interaction.member.displayName };
+  await upsertMember({ ...plaintiff, avatarUrl: interaction.user.displayAvatarURL({ extension: "png", size: 128 }) });
+  const context = `${target.member?.displayName ?? target.author.displayName} : ${conversation.sanitizeContent(target.content)}`.slice(0, CONTEXT_LENGTH);
+  await requestHearing({ channel, guild: interaction.guild, plaintiff, reply: answer }, [target.author.id], crime, botUser.id, context);
+};
+
+// Registered at startup in each allowed guild (an exception confirmed by the server owners, see AGENTS.md):
+discordClient.once("clientReady", trigger.safeListener("Open-trial command registration", async () => registerMessageCommand(OPEN_TRIAL_COMMAND)));
+
 trigger.discordEvent("interactionCreate", async (interaction) => {
+  if (interaction.isMessageContextMenuCommand() && interaction.commandName === OPEN_TRIAL_COMMAND) {
+    await askOpenTrial(interaction);
+    return;
+  }
+  if (interaction.isModalSubmit() && interaction.customId.startsWith(`${OPEN_TRIAL_MODAL}:`)) {
+    await submitOpenTrial(interaction, interaction.customId.split(":")[1]);
+    return;
+  }
   if (interaction.isUserSelectMenu() && interaction.customId === "hearing-lawyer") {
     await proposeLawyer(interaction);
     return;

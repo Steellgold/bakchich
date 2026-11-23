@@ -13,6 +13,7 @@ Trials only run inside the AGENTS category. Everything shown to users is in Fren
 
 - `@Tribunal procès @member pour <crime>`: opens a trial (5 min of debate, 2 min of voting).
 - `@Tribunal casier @member`: shows the member's criminal record.
+- Right click on a message, **Applications**, **Ouvrir un procès**: a form asks why, then the author of the message goes on trial, the message serving as context. The bot registers this command in each configured server at startup (it needs the `applications.commands` scope).
 
 ## Discord application
 

@@ -1,20 +1,16 @@
+import type { HearingRequest } from "#/triggers/hearings";
 import type { Message, MessageReplyOptions } from "discord.js";
 import { parseCommand } from "#/court/command";
 import { court, judge } from "#/court/court";
 import { EMOJI } from "#/court/emojis";
-import { AI_LAWYER, formatNames, MAX_ACCUSED, MAX_CRIME_LENGTH, normalizeCrime } from "#/court/engine";
-import { countActiveMembers, hearingDelayMs } from "#/court/hearing";
-import { saveHearing } from "#/court/hearings";
+import { AI_LAWYER, MAX_CRIME_LENGTH, normalizeCrime } from "#/court/engine";
 import { upsertMember } from "#/court/members";
 import { fetchRecord } from "#/court/record";
-import { AGENTS_CATEGORY_IDS, conversation, createHearingRoom, discordClient, fetchRecentHumanMessages, findDiscordGuildMember, getCategoryId, sanitizeDiscordMessage, startDiscordTyping } from "#/integrations/discord";
-import { collectContext, forceStartAnswers, forceStartHearing, hasPendingHearing, judgeSays, scheduleHearing } from "#/triggers/hearings";
+import { AGENTS_CATEGORY_IDS, conversation, discordClient, findDiscordGuildMember, getCategoryId, sanitizeDiscordMessage, startDiscordTyping } from "#/integrations/discord";
+import { collectContext, forceStartAnswers, forceStartHearing, judgeSays, requestHearing } from "#/triggers/hearings";
 import { logger } from "#/utils/logger";
 import { trigger } from "#/utils/trigger";
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, UserSelectMenuBuilder } from "discord.js";
 
-const CONTEXT_MESSAGES = 10;
-const LAWYER_LOOKUP_MESSAGES = 100;
 const REASON_WAIT_MS = 60_000;
 const CONTEXT_LENGTH = 300;
 
@@ -25,18 +21,15 @@ const reply = async (message: Message, content: string, components?: MessageRepl
   components,
 });
 
-// Under the announcement of a hearing: open it at once (the member who requested it), ask for the court-appointed lawyer, or pick a lawyer who must accept.
-const hearingComponents = () => [
-  new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId("hearing-start").setLabel("Ouvrir maintenant").setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId("hearing-ai-lawyer").setLabel("Avocat commis d'office").setStyle(ButtonStyle.Secondary),
-  ),
-  new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(
-    new UserSelectMenuBuilder().setCustomId("hearing-lawyer").setPlaceholder("Les accusés : choisir un avocat").setMinValues(1).setMaxValues(1),
-  ),
-];
-
 const authorName = (message: Message) => message.member?.displayName ?? message.author.username;
+
+/** A hearing requested by mentioning the bot: answered by replies to the message */
+const requestOf = (message: Message<true>): HearingRequest => ({
+  channel: message.channel,
+  guild: message.guild,
+  plaintiff: { id: message.author.id, name: authorName(message) },
+  reply: async (content, components) => reply(message, content, components),
+});
 
 /** Accused of a natural request: the mentioned members, plus the author of the message replied to, and that message as context */
 const resolveAccused = async (message: Message<true>, botId: string): Promise<{ ids: string[]; context: string | null }> => {
@@ -55,72 +48,6 @@ const askReason = async (message: Message<true>): Promise<string | null> => {
   const answers = await message.channel.awaitMessages({ filter: (answer) => answer.author.id === message.author.id, max: 1, time: REASON_WAIT_MS });
   const answer = answers.first();
   return answer === undefined ? null : normalizeCrime(answer.content);
-};
-
-/** Check the accusation, then announce the hearing: its time comes from the active members, and the Discord event announces it */
-const openHearing = async (message: Message<true>, accusedIds: string[], crime: string, botId: string, context: string | null) => {
-  if (court.get(message.channelId) !== undefined || hasPendingHearing(message.channelId)) {
-    await reply(message, `${EMOJI.hourglass} La cour est occupée, revenez plus tard.`);
-    return;
-  }
-
-  if (accusedIds.length > MAX_ACCUSED) {
-    await reply(message, `${EMOJI.courthouse} La cour ne juge pas plus de ${String(MAX_ACCUSED)} individus à la fois.`);
-    return;
-  }
-
-  const found = await Promise.all(accusedIds.map(async (id) => findDiscordGuildMember(message.guild, id)));
-  const accused = found.filter((member) => member !== null);
-  if (accused.length !== found.length) {
-    await reply(message, `${EMOJI.documentSearch} ${accused.length === 0 ? "Cet individu est inconnu" : "Un de ces individus est inconnu"} du Royaume.`);
-    return;
-  }
-  if (accused.some((member) => member.user.bot && member.id !== botId)) {
-    await reply(message, `${EMOJI.courthouse} La cour ne juge pas les machines. Sauf elle-même.`);
-    return;
-  }
-
-  const names = formatNames(accused.map((member) => member.displayName));
-  const recent = await fetchRecentHumanMessages(message.channel, LAWYER_LOOKUP_MESSAGES);
-  const screening = await judge.screen(crime, names, [...(context === null ? [] : [context]), ...recent.lines.slice(-CONTEXT_MESSAGES)]);
-  if (!screening.ok) {
-    await reply(message, `${EMOJI.alertShield} ${screening.reply}`);
-    return;
-  }
-
-  // The voice channel and its event come first: without them (no audio category, or Discord refusing), the trial opens at once.
-  const now = Date.now();
-  const wait = hearingDelayMs(countActiveMembers(recent.authors, now));
-  const room = await createHearingRoom(message.guild, { name: `Procès de ${names}`, description: context === null ? crime : `${crime}\n\n${context}`, startsAt: new Date(now + wait) });
-  const startsAt = new Date(room === null ? now : now + wait);
-
-  const hearing = await saveHearing({
-    channelId: message.channelId,
-    accused: accused.map((member) => ({ id: member.id, name: member.displayName })),
-    plaintiffId: message.author.id,
-    plaintiffName: authorName(message),
-    crime,
-    context,
-    startsAt,
-    voiceChannelId: room?.channelId ?? null,
-    eventId: room?.eventId ?? null,
-  });
-  scheduleHearing(hearing);
-
-  if (room !== null) await reply(message, `${EMOJI.courthouse} Procès de ${names} pour « ${crime} » : l'audience s'ouvre <t:${String(Math.round(startsAt.getTime() / 1000))}:R>. Rendez-vous dans <#${room.channelId}>. Les accusés ont jusque-là pour choisir un avocat, qui doit accepter, ou demander un avocat commis d'office.${room.eventUrl === null ? "" : ` Événement : ${room.eventUrl}`}`, hearingComponents());
-};
-
-// Channels with a request being checked: the checks take several seconds, two requests must not both pass them.
-const requesting = new Set<string>();
-
-const requestHearing = async (message: Message<true>, accusedIds: string[], crime: string, botId: string, context: string | null) => {
-  if (requesting.has(message.channelId)) {
-    await reply(message, `${EMOJI.hourglass} La cour est occupée, revenez plus tard.`);
-    return;
-  }
-
-  requesting.add(message.channelId);
-  await openHearing(message, accusedIds, crime, botId, context).finally(() => requesting.delete(message.channelId));
 };
 
 /** The prosecution and the defense call a member to the witness stand, or send the witness back */
@@ -200,7 +127,7 @@ trigger.discordEvent("messageCreate", async (message) => {
 
   if (command?.kind === "trial") {
     const stopTyping = startDiscordTyping(message.channel, () => logger.warn("Could not send the typing indicator"));
-    await requestHearing(message, command.accusedIds, command.crime, botUser.id, null).finally(stopTyping);
+    await requestHearing(requestOf(message), command.accusedIds, command.crime, botUser.id, null).finally(stopTyping);
     return;
   }
   if (command?.kind === "record") {
@@ -232,7 +159,7 @@ trigger.discordEvent("messageCreate", async (message) => {
     }
 
     const stopRequestTyping = startDiscordTyping(message.channel, () => logger.warn("Could not send the typing indicator"));
-    await requestHearing(message, ids, crime, botUser.id, context).finally(stopRequestTyping);
+    await requestHearing(requestOf(message), ids, crime, botUser.id, context).finally(stopRequestTyping);
     return;
   }
   if (intent.kind === "start-now") {

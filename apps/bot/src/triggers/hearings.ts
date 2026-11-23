@@ -1,16 +1,19 @@
 import type { Member } from "#/court/engine";
 import type { Hearing } from "#/court/hearings";
-import { court } from "#/court/court";
-import { AI_LAWYER, formatNames } from "#/court/engine";
-import { fetchUnfinishedHearings, setHearingLawyer, setHearingStatus } from "#/court/hearings";
+import type { Guild, SendableChannels } from "discord.js";
+import { court, judge } from "#/court/court";
+import { EMOJI } from "#/court/emojis";
+import { AI_LAWYER, formatNames, MAX_ACCUSED } from "#/court/engine";
+import { countActiveMembers, hearingDelayMs } from "#/court/hearing";
+import { fetchUnfinishedHearings, saveHearing, setHearingLawyer, setHearingStatus } from "#/court/hearings";
 import { upsertMember } from "#/court/members";
-import { createPreparationRoom, deleteHearingChannel, discordClient, fetchDiscordSendableChannel, findDiscordGuildMember, sendSafeMessage, setHearingEventStatus } from "#/integrations/discord";
+import { createHearingRoom, createPreparationRoom, deleteHearingChannel, discordClient, fetchDiscordSendableChannel, fetchRecentHumanMessages, findDiscordGuildMember, sendSafeMessage, setHearingEventStatus } from "#/integrations/discord";
 import { speak } from "#/integrations/piper";
 import { leaveVoice, playInVoice, watchSpeakers } from "#/integrations/voice";
 import { attempt } from "#/utils/attempt";
 import { logger } from "#/utils/logger";
 import { trigger } from "#/utils/trigger";
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, UserSelectMenuBuilder } from "discord.js";
 
 // The voice channel stays a few minutes after the verdict, so everyone hears it:
 const CHANNEL_DELETE_DELAY_MS = 5 * 60_000;
@@ -264,6 +267,101 @@ export const completeHearing = async (channelId: string): Promise<void> => {
   setTimeout(() => {
     removeChannel(hearing);
   }, CHANNEL_DELETE_DELAY_MS);
+};
+
+const LAWYER_LOOKUP_MESSAGES = 100;
+const SCREENING_CONTEXT_MESSAGES = 10;
+
+// Under the announcement of a hearing: open it at once (the member who requested it), ask for the court-appointed lawyer, or pick a lawyer who must accept.
+const hearingComponents = () => [
+  new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId("hearing-start").setLabel("Ouvrir maintenant").setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId("hearing-ai-lawyer").setLabel("Avocat commis d'office").setStyle(ButtonStyle.Secondary),
+  ),
+  new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(
+    new UserSelectMenuBuilder().setCustomId("hearing-lawyer").setPlaceholder("Les accusés : choisir un avocat").setMinValues(1).setMaxValues(1),
+  ),
+];
+
+/** Who asks for a hearing and where, with how to answer them: a mention of the bot, or the « Ouvrir un procès » message action */
+export type HearingRequest = {
+  channel: SendableChannels;
+  guild: Guild;
+  plaintiff: Member;
+  reply: (content: string, components?: ReturnType<typeof hearingComponents>) => Promise<unknown>;
+};
+
+/** Check the accusation, then announce the hearing: its time comes from the active members, and the Discord event announces it */
+const openHearing = async (request: HearingRequest, accusedIds: string[], crime: string, botId: string, context: string | null) => {
+  const { channel, guild } = request;
+  if (court.get(channel.id) !== undefined || hasPendingHearing(channel.id)) {
+    await request.reply(`${EMOJI.hourglass} La cour est occupée, revenez plus tard.`);
+    return;
+  }
+
+  if (accusedIds.length > MAX_ACCUSED) {
+    await request.reply(`${EMOJI.courthouse} La cour ne juge pas plus de ${String(MAX_ACCUSED)} individus à la fois.`);
+    return;
+  }
+
+  const found = await Promise.all(accusedIds.map(async (id) => findDiscordGuildMember(guild, id)));
+  const accused = found.filter((member) => member !== null);
+  if (accused.length !== found.length) {
+    await request.reply(`${EMOJI.documentSearch} ${accused.length === 0 ? "Cet individu est inconnu" : "Un de ces individus est inconnu"} du Royaume.`);
+    return;
+  }
+  if (accused.some((member) => member.user.bot && member.id !== botId)) {
+    await request.reply(`${EMOJI.courthouse} La cour ne juge pas les machines. Sauf elle-même.`);
+    return;
+  }
+
+  const names = formatNames(accused.map((member) => member.displayName));
+  const recent = await fetchRecentHumanMessages(channel, LAWYER_LOOKUP_MESSAGES);
+  const screening = await judge.screen(crime, names, [...(context === null ? [] : [context]), ...recent.lines.slice(-SCREENING_CONTEXT_MESSAGES)]);
+  if (!screening.ok) {
+    await request.reply(`${EMOJI.alertShield} ${screening.reply}`);
+    return;
+  }
+
+  // The voice channel and its event come first: without them (no audio category, or Discord refusing), the trial opens at once.
+  const now = Date.now();
+  const wait = hearingDelayMs(countActiveMembers(recent.authors, now));
+  const room = await createHearingRoom(guild, { name: `Procès de ${names}`, description: context === null ? crime : `${crime}\n\n${context}`, startsAt: new Date(now + wait) });
+  const startsAt = new Date(room === null ? now : now + wait);
+
+  const hearing = await saveHearing({
+    channelId: channel.id,
+    accused: accused.map((member) => ({ id: member.id, name: member.displayName })),
+    plaintiffId: request.plaintiff.id,
+    plaintiffName: request.plaintiff.name,
+    crime,
+    context,
+    startsAt,
+    voiceChannelId: room?.channelId ?? null,
+    eventId: room?.eventId ?? null,
+  });
+  scheduleHearing(hearing);
+
+  // Without voice channel the trial opens at once and announces itself; the request still gets an answer (an interaction must be answered).
+  if (room === null) {
+    await request.reply(`${EMOJI.courthouse} Procès de ${names} pour « ${crime} » : l'audience s'ouvre maintenant.`);
+    return;
+  }
+  await request.reply(`${EMOJI.courthouse} Procès de ${names} pour « ${crime} » : l'audience s'ouvre <t:${String(Math.round(startsAt.getTime() / 1000))}:R>. Rendez-vous dans <#${room.channelId}>. Les accusés ont jusque-là pour choisir un avocat, qui doit accepter, ou demander un avocat commis d'office.${room.eventUrl === null ? "" : ` Événement : ${room.eventUrl}`}`, hearingComponents());
+};
+
+// Channels with a request being checked: the checks take several seconds, two requests must not both pass them.
+const requesting = new Set<string>();
+
+/** Ask the court for a hearing, one request at a time per channel */
+export const requestHearing = async (request: HearingRequest, accusedIds: string[], crime: string, botId: string, context: string | null): Promise<void> => {
+  if (requesting.has(request.channel.id)) {
+    await request.reply(`${EMOJI.hourglass} La cour est occupée, revenez plus tard.`);
+    return;
+  }
+
+  requesting.add(request.channel.id);
+  await openHearing(request, accusedIds, crime, botId, context).finally(() => requesting.delete(request.channel.id));
 };
 
 // When Discord is ready after a restart: hearings still waiting are armed again, and the ones that were running lost their trial with the restart, so their event and channel are cleaned up.
