@@ -147,12 +147,21 @@ const gesturePacks: Gesture[][] = [
 ].map((pack) => pack.filter((gesture): gesture is Gesture => gesture !== undefined));
 
 const GESTURE_SECONDS = 2.4;
+// Remote members arrive in steps of 100 ms: the character follows them smoothly and reads a little ahead from their last speed.
+const FOLLOW_RATE = 14;
+const TURN_RATE = 12;
+const EXTRAPOLATE_SECONDS = 0.1;
+const STALE_SECONDS = 0.25;
+const STRIDE_PER_METER = 2.4;
 
 /** Robed low-poly member with a stable appearance, a white jabot and a Discord lapel badge. */
 export const Character = ({ id, name, avatarUrl, position, rotation, seated, onBench = false, speech, color, elevation = 0, wig = false, speaking = false, interpolate = false, follow }: CharacterProps) => {
   const groupRef = useRef<Group>(null);
   const leftArmRef = useRef<Group>(null);
   const rightArmRef = useRef<Group>(null);
+  const leftLegRef = useRef<Group>(null);
+  const rightLegRef = useRef<Group>(null);
+  const motionRef = useRef({ lastTarget: { x: position.x, z: position.z }, velocity: { x: 0, z: 0 }, changedAt: 0, phase: 0, walk: 0 });
   const texture = useAvatarTexture(avatarUrl);
   const height = seated ? 0.45 : 0.9;
   const headY = height + (seated ? 0.55 : 0.8);
@@ -164,23 +173,55 @@ export const Character = ({ id, name, avatarUrl, position, rotation, seated, onB
   // Seated members rest their hands forward, standing ones let their arms hang:
   const restX = seated ? -0.9 : 0;
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     const current = groupRef.current;
     if (current === null) return;
-    const target = follow?.current ?? position;
-    const factor = interpolate ? 0.25 : 1;
-    current.position.x += (target.x - current.position.x) * factor;
-    current.position.z += (target.z - current.position.z) * factor;
-    current.rotation.y = rotation;
-
+    const motion = motionRef.current;
     const time = state.clock.elapsedTime;
+    const target = follow?.current ?? position;
+    let desired = target;
+
+    if (interpolate) {
+      if (target.x !== motion.lastTarget.x || target.z !== motion.lastTarget.z) {
+        const elapsed = Math.min(Math.max(time - motion.changedAt, 0.05), 0.3);
+        motion.velocity = { x: (target.x - motion.lastTarget.x) / elapsed, z: (target.z - motion.lastTarget.z) / elapsed };
+        motion.lastTarget = { x: target.x, z: target.z };
+        motion.changedAt = time;
+      }
+      if (time - motion.changedAt > STALE_SECONDS) motion.velocity = { x: 0, z: 0 };
+
+      const ahead = Math.min(time - motion.changedAt, EXTRAPOLATE_SECONDS);
+      desired = { x: target.x + motion.velocity.x * ahead, z: target.z + motion.velocity.z * ahead };
+    }
+
+    const beforeX = current.position.x;
+    const beforeZ = current.position.z;
+    const blend = interpolate ? 1 - Math.exp(-delta * FOLLOW_RATE) : 1;
+    current.position.x += (desired.x - beforeX) * blend;
+    current.position.z += (desired.z - beforeZ) * blend;
+
+    // Turn by the shortest way instead of snapping:
+    const turn = Math.atan2(Math.sin(rotation - current.rotation.y), Math.cos(rotation - current.rotation.y));
+    current.rotation.y += turn * (1 - Math.exp(-delta * TURN_RATE));
+
+    // Walking cycle from the distance actually covered: legs swing, arms swing the other way, the body bobs.
+    const moved = Math.hypot(current.position.x - beforeX, current.position.z - beforeZ);
+    const walking = !seated && moved / Math.max(delta, 0.001) > 0.4;
+    motion.phase += moved * STRIDE_PER_METER;
+    motion.walk += ((walking ? 1 : 0) - motion.walk) * (1 - Math.exp(-delta * 10));
+    current.position.y = baseY + Math.abs(Math.sin(motion.phase)) * 0.045 * motion.walk;
+    for (const [index, leg] of [leftLegRef.current, rightLegRef.current].entries()) {
+      if (leg !== null) leg.rotation.x = Math.sin(motion.phase + index * Math.PI) * 0.75 * motion.walk;
+    }
+
     const gesture = speaking ? pack[Math.floor(time / GESTURE_SECONDS + id.length) % pack.length] : undefined;
     for (const [index, arm] of [leftArmRef.current, rightArmRef.current].entries()) {
       if (arm === null) continue;
       const side = index === 0 ? -1 : 1;
       const pose = gesture === undefined ? { ...IDLE, x: restX } : (index === 0 ? gesture.left : gesture.right);
       const wobble = pose.wobble ?? 0;
-      arm.rotation.x += (pose.x + Math.sin(time * 5 + index) * wobble - arm.rotation.x) * 0.15;
+      const swing = gesture === undefined ? Math.sin(motion.phase + (index === 0 ? Math.PI : 0)) * 0.6 * motion.walk : 0;
+      arm.rotation.x += (pose.x + swing + Math.sin(time * 5 + index) * wobble - arm.rotation.x) * 0.15;
       arm.rotation.z += (side * (pose.outward + Math.cos(time * 4 + index) * wobble * 0.5) - arm.rotation.z) * 0.15;
     }
   });
@@ -192,12 +233,14 @@ export const Character = ({ id, name, avatarUrl, position, rotation, seated, onB
 
   return (
     <group ref={groupRef} position={[position.x, baseY, position.z]}>
-      {!seated && [-0.13, 0.13].map((x) => (
-        <mesh key={x} position={[x, 0.23, 0]} castShadow>
-          <boxGeometry args={[0.17, 0.46, 0.24]} />
-          <meshToonMaterial color="#3b2a5a" />
-          {outline}
-        </mesh>
+      {!seated && [-1, 1].map((side) => (
+        <group key={side} ref={side === -1 ? leftLegRef : rightLegRef} position={[side * 0.13, 0.46, 0]}>
+          <mesh position={[0, -0.23, 0]} castShadow>
+            <boxGeometry args={[0.17, 0.46, 0.24]} />
+            <meshToonMaterial color="#3b2a5a" />
+            {outline}
+          </mesh>
+        </group>
       ))}
       {seated && onBench && [-0.13, 0.13].map((x) => (
         <group key={x}>

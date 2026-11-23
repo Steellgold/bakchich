@@ -1,6 +1,6 @@
 "use client";
 
-import type { Box } from "@tribunal/bot/room/layout";
+import type { Box, Seat } from "@tribunal/bot/room/layout";
 import { tileBoxTexture, tilePlaneTexture, useCourtroomTextures } from "./textures";
 import { Outlines } from "@react-three/drei";
 import { GATE, OBSTACLES, RESTRICTED_ZONE, ROOM, SEATS, SIDE_DOOR } from "@tribunal/bot/room/layout";
@@ -51,6 +51,17 @@ const Bench = ({ box, textures }: { box: Box; textures: Textures }) => {
     </group>
   );
 };
+
+/** Chair at a seat of the courtroom: seat, back behind the sitter and four legs */
+const Chair = ({ seat, textures }: { seat: Seat; textures: Textures }) => (
+  <group position={[seat.position.x, 0, seat.position.z]} rotation-y={seat.rotation}>
+    <Part position={[0, 0.42, 0]} size={[0.5, 0.06, 0.5]} textures={textures} kind="bench" />
+    <Part position={[0, 0.75, -0.3]} size={[0.5, 0.6, 0.06]} textures={textures} kind="bench" />
+    {[-1, 1].flatMap((x) => [-1, 1].map((z) => (
+      <Part key={`${String(x)}:${String(z)}`} position={[x * 0.2, 0.2, z * 0.2]} size={[0.06, 0.4, 0.06]} textures={textures} outline={false} />
+    )))}
+  </group>
+);
 
 /** Chunky desk with an apron, an inset front panel and brass handles. */
 const Desk = ({ box, textures }: { box: Box; textures: Textures }) => {
@@ -237,6 +248,10 @@ export const Courtroom = () => {
       })}
 
       <Interior textures={textures} />
+
+      {[...SEATS.accused, SEATS.prosecutor, SEATS.defense, SEATS.witness, ...SEATS.jury].map((seat) => (
+        <Chair key={seat.id} seat={seat} textures={textures} />
+      ))}
 
       <mesh position={[GATE.x, 0.03, GATE.z]} rotation-x={-Math.PI / 2}>
         <ringGeometry args={[0.4, 0.6, 5]} />

@@ -131,6 +131,10 @@ const handleMessage = (member: RoomMember, socket: WebSocket, raw: string) => {
     world.sitOnBench(member.id);
     return;
   }
+  if (message.type === "sit-down") {
+    world.sitDown(member.id);
+    return;
+  }
   if (message.type === "stand-up") {
     world.standUp(member.id);
     return;

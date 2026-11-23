@@ -20,6 +20,12 @@ export type PlayerState = {
 const ROLE_SEATS: Record<"prosecutor" | "defense" | "witness", Seat> = { prosecutor: SEATS.prosecutor, defense: SEATS.defense, witness: SEATS.witness };
 const BENCH_REACH = 1.25;
 
+/** How close to their own seat a standing party must be to sit down again */
+export const SEAT_REACH = 1.25;
+
+/** Seat of a role in the trial: accused take the seats of the box in order, the others have their own */
+export const seatForRole = (role: Role, trial: { accused: { id: string }[] } | null, id: string): Seat | undefined => (role === "accused" ? SEATS.accused[trial?.accused.findIndex((member) => member.id === id) ?? -1] : ROLE_SEATS[role]);
+
 /** The closest bench seat within reach that no connected player is using. */
 export const nearbyBenchSeat = (position: Vec2, occupiedSeats: ReadonlySet<string | null>): Seat | undefined => {
   let closest: Seat | undefined;
@@ -120,6 +126,15 @@ export class World {
     return "seated";
   }
 
+  /** A party who stood up sits back at their own seat when close enough */
+  public sitDown(id: string): void {
+    const state = this.states.get(id);
+    if (state?.seatId !== null || state.role === null) return;
+
+    const seat = this.seatFor(state.role, id);
+    if (seat !== undefined && Math.hypot(state.position.x - seat.position.x, state.position.z - seat.position.z) <= SEAT_REACH) this.sit(state, seat);
+  }
+
   public sitOnBench(id: string): void {
     const state = this.states.get(id);
     if (state?.seatId !== null) return;
@@ -183,7 +198,7 @@ export class World {
   }
 
   private seatFor(role: Role, id: string): Seat | undefined {
-    return role === "accused" ? SEATS.accused[this.trial?.accused.findIndex((member) => member.id === id) ?? -1] : ROLE_SEATS[role];
+    return seatForRole(role, this.trial, id);
   }
 
   private assignRole(state: PlayerState): void {

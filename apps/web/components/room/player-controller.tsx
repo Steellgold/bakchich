@@ -7,7 +7,7 @@ import { Character } from "./character";
 import { isBenchSeat } from "./seats";
 import { useFrame, useThree } from "@react-three/fiber";
 import { GATE, GATE_RADIUS, MAX_SPEED, ROOM, TICK_MS } from "@tribunal/bot/room/layout";
-import { accessFor, canStand, nearbyBenchSeat } from "@tribunal/bot/room/world";
+import { accessFor, canStand, nearbyBenchSeat, SEAT_REACH, seatForRole } from "@tribunal/bot/room/world";
 import { useEffect, useRef } from "react";
 
 /** Distance above which the local prediction snaps back to the server position */
@@ -25,7 +25,7 @@ const KEYS = {
   right: ["KeyD"],
 };
 
-export type NearbyInteraction = "become-juror" | "sit-on-bench" | null;
+export type NearbyInteraction = "become-juror" | "sit-on-bench" | "sit-down" | null;
 
 type PlayerControllerProps = {
   self: PlayerState;
@@ -122,7 +122,10 @@ export const PlayerController = ({ self, trial, speech, speaking, send, occupied
     if (self.seatId === null) {
       const position = predictedRef.current;
       const nearGate = Math.hypot(position.x - GATE.x, position.z - GATE.z) <= GATE_RADIUS;
+      const ownSeat = self.role === null ? undefined : seatForRole(self.role, trial, self.id);
+      const nearOwnSeat = ownSeat !== undefined && Math.hypot(position.x - ownSeat.position.x, position.z - ownSeat.position.z) <= SEAT_REACH;
       if (nearGate && self.role === null) interaction = "become-juror";
+      else if (nearOwnSeat) interaction = "sit-down";
       else if (nearbyBenchSeat(self.position, occupiedSeats) !== undefined) interaction = "sit-on-bench";
     }
     if (interaction !== interactionRef.current) {

@@ -9,6 +9,7 @@ const clientMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("move"), x: z.number(), z: z.number(), rotation: z.number() }),
   z.object({ type: z.literal("become-juror") }),
   z.object({ type: z.literal("sit-on-bench") }),
+  z.object({ type: z.literal("sit-down") }),
   z.object({ type: z.literal("stand-up") }),
   z.object({ type: z.literal("vote"), guilty: z.boolean() }),
 ]);

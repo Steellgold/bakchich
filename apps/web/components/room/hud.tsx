@@ -66,7 +66,7 @@ export const Hud = ({ trial, verdict, voteResult, interaction, seated, send }: H
       <div className="hud-hints">
         {seated && <span>[E] Se lever</span>}
         {!seated && interaction === "become-juror" && <span>[E] Devenir juré</span>}
-        {!seated && interaction === "sit-on-bench" && <span>[E] S’asseoir</span>}
+        {!seated && (interaction === "sit-on-bench" || interaction === "sit-down") && <span>[E] S’asseoir</span>}
         <span>ZQSD : se déplacer, clic sur la scène : caméra à la souris, Échap : libérer le curseur</span>
       </div>
     </div>
