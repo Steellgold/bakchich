@@ -4,9 +4,10 @@ import type { Vec2 } from "@tribunal/bot/room/layout";
 import type { ClientMessage } from "@tribunal/bot/room/protocol";
 import type { PlayerState } from "@tribunal/bot/room/world";
 import { Character } from "./character";
+import { isBenchSeat } from "./seats";
 import { useFrame, useThree } from "@react-three/fiber";
 import { GATE, GATE_RADIUS, MAX_SPEED, ROOM, TICK_MS } from "@tribunal/bot/room/layout";
-import { canStand } from "@tribunal/bot/room/world";
+import { canStand, nearbyBenchSeat } from "@tribunal/bot/room/world";
 import { useEffect, useRef } from "react";
 
 /** Distance above which the local prediction snaps back to the server position */
@@ -24,15 +25,18 @@ const KEYS = {
   right: ["KeyD"],
 };
 
+export type NearbyInteraction = "become-juror" | "sit-on-bench" | null;
+
 type PlayerControllerProps = {
   self: PlayerState;
   speech: string | null;
   send: (message: ClientMessage) => void;
-  onNearGate: (near: boolean) => void;
+  occupiedSeats: ReadonlySet<string | null>;
+  onInteraction: (interaction: NearbyInteraction) => void;
 };
 
 /** The local player: keyboard movement with prediction, third-person camera and the E interaction */
-export const PlayerController = ({ self, speech, send, onNearGate }: PlayerControllerProps) => {
+export const PlayerController = ({ self, speech, send, occupiedSeats, onInteraction }: PlayerControllerProps) => {
   const camera = useThree((state) => state.camera);
   const pressedRef = useRef(new Set<string>());
   const predictedRef = useRef<Vec2>({ ...self.position });
@@ -40,11 +44,17 @@ export const PlayerController = ({ self, speech, send, onNearGate }: PlayerContr
   // 0 puts the camera behind a player facing the judge:
   const yawRef = useRef(0);
   const lastSentAtRef = useRef(0);
-  const nearGateRef = useRef(false);
+  const interactionRef = useRef<NearbyInteraction>(null);
+  const previousSeatRef = useRef(self.seatId);
 
-  // Server corrections: snap when the prediction drifted, and always follow seats:
+  // An authoritative seat change can move the player even when the correction is small.
+  const seatChanged = previousSeatRef.current !== self.seatId;
   const gap = Math.hypot(self.position.x - predictedRef.current.x, self.position.z - predictedRef.current.z);
-  if (self.seatId !== null || gap > SNAP_DISTANCE) predictedRef.current = { ...self.position };
+  if (seatChanged || self.seatId !== null || gap > SNAP_DISTANCE) predictedRef.current = { ...self.position };
+  if (seatChanged) {
+    previousSeatRef.current = self.seatId;
+    facingRef.current = self.rotation;
+  }
 
   useEffect(() => {
     const down = (event: KeyboardEvent) => {
@@ -52,7 +62,7 @@ export const PlayerController = ({ self, speech, send, onNearGate }: PlayerContr
       // A held key repeats: E must act once per press.
       if (event.code !== "KeyE" || event.repeat) return;
       if (self.seatId !== null) send({ type: "stand-up" });
-      else if (nearGateRef.current && self.role === null) send({ type: "become-juror" });
+      else if (interactionRef.current !== null) send({ type: interactionRef.current });
     };
     const up = (event: KeyboardEvent) => {
       pressedRef.current.delete(event.code);
@@ -75,7 +85,7 @@ export const PlayerController = ({ self, speech, send, onNearGate }: PlayerContr
       window.removeEventListener("pointermove", drag);
       window.removeEventListener("blur", release);
     };
-  }, [self.seatId, self.role, send]);
+  }, [self.seatId, send]);
 
   useFrame((_state, delta) => {
     const isDown = (codes: string[]) => codes.some((code) => pressedRef.current.has(code));
@@ -99,10 +109,16 @@ export const PlayerController = ({ self, speech, send, onNearGate }: PlayerContr
       send({ type: "move", x: predictedRef.current.x, z: predictedRef.current.z, rotation: facingRef.current });
     }
 
-    const isNearGate = Math.hypot(predictedRef.current.x - GATE.x, predictedRef.current.z - GATE.z) <= GATE_RADIUS;
-    if (isNearGate !== nearGateRef.current) {
-      nearGateRef.current = isNearGate;
-      onNearGate(isNearGate);
+    let interaction: NearbyInteraction = null;
+    if (self.seatId === null) {
+      const position = predictedRef.current;
+      const nearGate = Math.hypot(position.x - GATE.x, position.z - GATE.z) <= GATE_RADIUS;
+      if (nearGate && self.role === null) interaction = "become-juror";
+      else if (nearbyBenchSeat(self.position, occupiedSeats) !== undefined) interaction = "sit-on-bench";
+    }
+    if (interaction !== interactionRef.current) {
+      interactionRef.current = interaction;
+      onInteraction(interaction);
     }
 
     // Clamped inside the walls, otherwise the camera ends up behind one and only sees its outer face:
@@ -116,12 +132,14 @@ export const PlayerController = ({ self, speech, send, onNearGate }: PlayerContr
 
   return (
     <Character
+      id={self.id}
       name={self.name}
       avatarUrl={self.avatarUrl}
       position={predictedRef.current}
       follow={predictedRef}
       rotation={self.seatId === null ? facingRef.current : self.rotation}
       seated={self.seatId !== null}
+      onBench={isBenchSeat(self.seatId)}
       speech={speech}
     />
   );

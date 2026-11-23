@@ -1,7 +1,7 @@
 import type { Trial } from "../court/engine";
 import type { Vec2 } from "./layout";
 import { GATE, GATE_RADIUS, MAX_SPEED, OBSTACLES, RESTRICTED_ZONE, ROOM, SEATS } from "./layout";
-import { pickDisplayedTrial, World } from "./world";
+import { canStand, pickDisplayedTrial, World } from "./world";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
@@ -105,6 +105,132 @@ describe("World jurors", () => {
     join(world, "next");
     world.move("next", nearGate, 0, 100_000);
     assert.equal(world.becomeJuror("next"), "seated");
+  });
+});
+
+describe("World benches", () => {
+  const seat = SEATS.benches[0];
+  assert.ok(seat);
+  const approach: Vec2 = { x: seat.position.x, z: seat.position.z - 1 };
+
+  it("seats a nearby standing player facing the judge and ignores seated movement", () => {
+    const world = new World();
+    join(world, "spectator");
+    world.move("spectator", approach, 0, 100_000);
+
+    world.sitOnBench("spectator");
+    assert.equal(player(world, "spectator")?.seatId, seat.id);
+    assert.deepEqual(player(world, "spectator")?.position, seat.position);
+    assert.equal(player(world, "spectator")?.rotation, seat.rotation);
+    assert.equal(player(world, "spectator")?.role, null);
+
+    world.sitOnBench("spectator");
+    assert.equal(player(world, "spectator")?.seatId, seat.id);
+    world.move("spectator", ROOM.spawn, 0, 100_000);
+    assert.deepEqual(player(world, "spectator")?.position, seat.position);
+    assert.equal(player(world, "spectator")?.rotation, seat.rotation);
+  });
+
+  it("ignores missing or distant players and only allows seats within 1.25 meters", () => {
+    const world = new World();
+    world.sitOnBench("missing");
+    assert.equal(world.players().length, 0);
+
+    join(world, "spectator");
+    world.sitOnBench("spectator");
+    assert.equal(player(world, "spectator")?.seatId, null);
+    assert.deepEqual(player(world, "spectator")?.position, ROOM.spawn);
+
+    const tooFar = { x: seat.position.x, z: seat.position.z - 1.26 };
+    world.move("spectator", tooFar, 0, 100_000);
+    world.sitOnBench("spectator");
+    assert.equal(player(world, "spectator")?.seatId, null);
+    assert.deepEqual(player(world, "spectator")?.position, tooFar);
+
+    world.move("spectator", { x: seat.position.x, z: seat.position.z - 1.25 }, 0, 100_000);
+    world.sitOnBench("spectator");
+    assert.equal(player(world, "spectator")?.seatId, seat.id);
+  });
+
+  it("reserves occupied seats and frees them after standing in front on walkable floor", () => {
+    const world = new World();
+    for (const id of ["first", "second"]) {
+      join(world, id);
+      world.move(id, approach, 0, 100_000);
+      world.sitOnBench(id);
+    }
+    assert.equal(player(world, "first")?.seatId, seat.id);
+    assert.equal(player(world, "second")?.seatId, null);
+    assert.deepEqual(player(world, "second")?.position, approach);
+
+    world.standUp("first");
+    const standing = player(world, "first");
+    assert.ok(standing);
+    assert.equal(standing.seatId, null);
+    assert.equal(standing.position.x, seat.position.x);
+    assert.ok(standing.position.z < seat.position.z);
+    assert.ok(distance(standing.position, seat.position) <= 1.25);
+    assert.ok(canStand(standing.position, false));
+
+    world.sitOnBench("second");
+    assert.equal(player(world, "second")?.seatId, seat.id);
+  });
+
+  it("reuses a seat after its occupant disconnects", () => {
+    const world = new World();
+    join(world, "first");
+    world.move("first", approach, 0, 100_000);
+    world.sitOnBench("first");
+    world.leave("first");
+
+    join(world, "second");
+    world.move("second", approach, 0, 100_000);
+    world.sitOnBench("second");
+    assert.equal(player(world, "second")?.seatId, seat.id);
+  });
+
+  it("keeps spectators on benches between trials while convoked players take their role seat", () => {
+    const world = new World();
+    join(world, "spectator");
+    world.move("spectator", approach, 0, 100_000);
+    world.sitOnBench("spectator");
+
+    world.setTrial(trialFor("t1", "someone-else", 1));
+    assert.equal(player(world, "spectator")?.seatId, seat.id);
+    assert.deepEqual(player(world, "spectator")?.position, seat.position);
+
+    world.setTrial(null);
+    assert.equal(player(world, "spectator")?.seatId, seat.id);
+    assert.deepEqual(player(world, "spectator")?.position, seat.position);
+
+    world.setTrial(trialFor("t2", "spectator", 2));
+    assert.equal(player(world, "spectator")?.role, "accused");
+    assert.equal(player(world, "spectator")?.seatId, SEATS.accused.id);
+    assert.deepEqual(player(world, "spectator")?.position, SEATS.accused.position);
+
+    join(world, "next");
+    world.move("next", approach, 0, 100_000);
+    world.sitOnBench("next");
+    assert.equal(player(world, "next")?.seatId, seat.id);
+  });
+
+  it("does not turn a bench seat into jury membership or restricted access", () => {
+    const world = new World();
+    join(world, "spectator");
+    world.move("spectator", approach, 0, 100_000);
+    world.sitOnBench("spectator");
+    assert.equal(world.becomeJuror("spectator"), "too-far");
+    assert.equal(player(world, "spectator")?.seatId, seat.id);
+
+    world.standUp("spectator");
+    world.move("spectator", nearGate, 0, 100_000);
+    world.sitOnBench("spectator");
+    assert.equal(player(world, "spectator")?.seatId, null);
+    assert.deepEqual(player(world, "spectator")?.position, nearGate);
+
+    world.move("spectator", { x: GATE.x, z: RESTRICTED_ZONE.max.z - 0.5 }, 0, 100_000);
+    assert.deepEqual(player(world, "spectator")?.position, nearGate);
+    assert.equal(player(world, "spectator")?.role, null);
   });
 });
 

@@ -7,6 +7,7 @@ describe("parseClientMessage", () => {
     assert.deepEqual(parseClientMessage(`{"type":"auth","token":"abc"}`), { type: "auth", token: "abc" });
     assert.deepEqual(parseClientMessage(`{"type":"move","x":1.5,"z":-2,"rotation":3.1}`), { type: "move", x: 1.5, z: -2, rotation: 3.1 });
     assert.deepEqual(parseClientMessage(`{"type":"become-juror"}`), { type: "become-juror" });
+    assert.deepEqual(parseClientMessage(`{"type":"sit-on-bench"}`), { type: "sit-on-bench" });
     assert.deepEqual(parseClientMessage(`{"type":"stand-up"}`), { type: "stand-up" });
     assert.deepEqual(parseClientMessage(`{"type":"vote","guilty":true}`), { type: "vote", guilty: true });
   });

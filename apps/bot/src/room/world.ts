@@ -15,6 +15,21 @@ export type PlayerState = {
 };
 
 const ROLE_SEATS: Record<Role, Seat> = { accused: SEATS.accused, prosecutor: SEATS.prosecutor, defense: SEATS.defense };
+const BENCH_REACH = 1.25;
+
+/** The closest bench seat within reach that no connected player is using. */
+export const nearbyBenchSeat = (position: Vec2, occupiedSeats: ReadonlySet<string | null>): Seat | undefined => {
+  let closest: Seat | undefined;
+  let distance = BENCH_REACH;
+  for (const seat of SEATS.benches) {
+    if (occupiedSeats.has(seat.id)) continue;
+    const gap = Math.hypot(seat.position.x - position.x, seat.position.z - position.z);
+    if (gap > distance) continue;
+    closest = seat;
+    distance = gap;
+  }
+  return closest;
+};
 
 const inRestrictedZone = (point: Vec2) => point.x >= RESTRICTED_ZONE.min.x && point.x <= RESTRICTED_ZONE.max.x
   && point.z >= RESTRICTED_ZONE.min.z && point.z <= RESTRICTED_ZONE.max.z;
@@ -90,13 +105,24 @@ export class World {
     return "seated";
   }
 
-  /** Leave a seat: jurors go back to the gate, convoked players stay where they sat */
+  public sitOnBench(id: string): void {
+    const state = this.states.get(id);
+    if (state?.seatId !== null) return;
+    const occupiedSeats = new Set([...this.states.values()].map((player) => player.seatId));
+    const seat = nearbyBenchSeat(state.position, occupiedSeats);
+    if (seat !== undefined) this.sit(state, seat);
+  }
+
+  /** Stand in front of the bench or return from the jury box to the gate. */
   public standUp(id: string): void {
     const state = this.states.get(id);
     if (state === undefined || state.seatId === null) return;
 
+    const bench = state.seatId.startsWith("bench-") ? OBSTACLES.find(({ kind, min, max }) => kind === "bench"
+      && state.position.x >= min.x && state.position.x <= max.x && state.position.z >= min.z && state.position.z <= max.z) : undefined;
     state.seatId = null;
-    if (state.role === null) state.position = { ...GATE };
+    if (bench !== undefined) state.position = { x: state.position.x, z: bench.min.z - PLAYER_RADIUS - 0.05 };
+    else if (state.role === null) state.position = { ...GATE };
   }
 
   /** Change the displayed trial: everyone leaves the restricted zone, then the new convoked players take their seats */

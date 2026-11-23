@@ -1,5 +1,6 @@
 "use client";
 
+import type { NearbyInteraction } from "./player-controller";
 import type { VoteResult } from "@tribunal/bot/court/engine";
 import type { ClientMessage, TrialView } from "@tribunal/bot/room/protocol";
 import { useEffect, useState } from "react";
@@ -20,13 +21,13 @@ type HudProps = {
   trial: TrialView | null;
   verdict: string | null;
   voteResult: VoteResult | null;
-  nearGate: boolean;
+  interaction: NearbyInteraction;
   seated: boolean;
   send: (message: ClientMessage) => void;
 };
 
 /** Overlay with the trial in progress, its countdown, the vote buttons and the interaction hints */
-export const Hud = ({ trial, verdict, voteResult, nearGate, seated, send }: HudProps) => {
+export const Hud = ({ trial, verdict, voteResult, interaction, seated, send }: HudProps) => {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -61,7 +62,8 @@ export const Hud = ({ trial, verdict, voteResult, nearGate, seated, send }: HudP
 
       <div className="hud-hints">
         {seated && <span>[E] Se lever</span>}
-        {!seated && nearGate && <span>[E] Devenir juré</span>}
+        {!seated && interaction === "become-juror" && <span>[E] Devenir juré</span>}
+        {!seated && interaction === "sit-on-bench" && <span>[E] S’asseoir</span>}
         <span>ZQSD : se déplacer, clic glissé : caméra</span>
       </div>
     </div>

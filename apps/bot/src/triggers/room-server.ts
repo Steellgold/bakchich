@@ -2,7 +2,7 @@ import type { Trial } from "#/court/engine";
 import type { KnownMember } from "#/court/members";
 import type { RoomMember } from "#/room/access";
 import type { Npc, ServerMessage, TrialView } from "#/room/protocol";
-import type { Role } from "#/room/world";
+import type { PlayerState, Role } from "#/room/world";
 import type { IncomingMessage } from "node:http";
 import type { RawData } from "ws";
 import { court } from "#/court/court";
@@ -89,7 +89,7 @@ const trialView = (trial: Trial): TrialView => ({
 });
 
 // Absent members shown seated: convoked players of the displayed trial in their seats, then known members on the benches.
-const npcs = (): Npc[] => {
+const npcs = (players: PlayerState[]): Npc[] => {
   const avatarOf = (id: string) => knownMembers.find((member) => member.id === id)?.avatarUrl ?? null;
   const roles: [Role, { id: string; name: string } | null | undefined][] = [["accused", displayed?.accused], ["prosecutor", displayed?.plaintiff], ["defense", displayed?.lawyer]];
 
@@ -97,9 +97,10 @@ const npcs = (): Npc[] => {
   const convokedIds = new Set(roles.map(([, member]) => member?.id));
 
   const benchers = knownMembers.filter((member) => !sockets.has(member.id) && !convokedIds.has(member.id));
+  const occupiedSeats = new Set(players.map((player) => player.seatId));
   const seated = SEATS.benches.flatMap((seat, index) => {
     const member = benchers[index];
-    return member === undefined ? [] : [{ id: member.id, name: member.name, avatarUrl: member.avatarUrl, seatId: seat.id }];
+    return member === undefined || occupiedSeats.has(seat.id) ? [] : [{ id: member.id, name: member.name, avatarUrl: member.avatarUrl, seatId: seat.id }];
   });
 
   return [...convoked, ...seated];
@@ -118,6 +119,10 @@ const handleMessage = (member: RoomMember, socket: WebSocket, raw: string) => {
   }
   if (message.type === "become-juror") {
     world.becomeJuror(member.id);
+    return;
+  }
+  if (message.type === "sit-on-bench") {
+    world.sitOnBench(member.id);
     return;
   }
   if (message.type === "stand-up") {
@@ -200,7 +205,8 @@ court.on("event", (event) => {
 setInterval(() => {
   displayed = pickDisplayedTrial(displayed, court.list());
   world.setTrial(displayed);
-  broadcast({ type: "snapshot", players: world.players(), npcs: npcs(), trial: displayed === null ? null : trialView(displayed) });
+  const players = world.players();
+  broadcast({ type: "snapshot", players, npcs: npcs(players), trial: displayed === null ? null : trialView(displayed) });
 }, TICK_MS);
 
 setInterval(trigger.safeListener("Room known members refresh", refreshKnownMembers), KNOWN_MEMBERS_REFRESH_MS);
