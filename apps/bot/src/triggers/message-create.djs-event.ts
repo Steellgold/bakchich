@@ -2,7 +2,7 @@ import type { Message, MessageReplyOptions } from "discord.js";
 import { parseCommand } from "#/court/command";
 import { court, judge } from "#/court/court";
 import { EMOJI } from "#/court/emojis";
-import { formatNames, MAX_ACCUSED, MAX_CRIME_LENGTH, normalizeCrime } from "#/court/engine";
+import { AI_LAWYER, formatNames, MAX_ACCUSED, MAX_CRIME_LENGTH, normalizeCrime } from "#/court/engine";
 import { countActiveMembers, hearingDelayMs } from "#/court/hearing";
 import { saveHearing } from "#/court/hearings";
 import { upsertMember } from "#/court/members";
@@ -131,8 +131,8 @@ const handleWitness = async (message: Message<true>, kind: "call-witness" | "dis
     return;
   }
 
-  // The accused defend themselves when they have no lawyer:
-  const counselIds = [trial.plaintiff.id, ...(trial.lawyer === null ? trial.accused.map((member) => member.id) : [trial.lawyer.id])];
+  // The accused defend themselves when they have no lawyer, or when the lawyer is the AI, who cannot call anyone:
+  const counselIds = [trial.plaintiff.id, ...(trial.lawyer === null || trial.lawyer.id === AI_LAWYER.id ? trial.accused.map((member) => member.id) : [trial.lawyer.id])];
   if (!counselIds.includes(message.author.id)) {
     await reply(message, `${EMOJI.courthouse} Seuls l'accusation et la défense appellent les témoins.`);
     return;
@@ -157,8 +157,9 @@ const handleWitness = async (message: Message<true>, kind: "call-witness" | "dis
     return;
   }
 
-  if (court.callWitness(message.channelId, { id: witness.id, name: witness.displayName }) === "closed") {
-    await reply(message, `${EMOJI.hourglass} Les débats sont clos, plus de témoin.`);
+  const called = court.callWitness(message.channelId, { id: witness.id, name: witness.displayName });
+  if (called !== "ok") {
+    await reply(message, called === "closed" ? `${EMOJI.hourglass} Les débats sont clos, plus de témoin.` : `${EMOJI.hourglass} Le procès est terminé.`);
     return;
   }
 

@@ -42,7 +42,7 @@ export type CourtEvent
     /** Someone spoke in the trial channel, speakerId null being the judge */
     | { type: "speech"; trial: Trial; speakerId: string | null; text: string };
 
-export type VoteResult = "ok" | "not-allowed" | "closed" | "no-trial";
+export type VoteResult = "ok" | "not-allowed" | "not-in-voice" | "closed" | "no-trial";
 
 /** "A", "A et B" or "A, B et C" */
 export const formatNames = (names: string[]): string => (names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} et ${names.at(-1) ?? ""}`);

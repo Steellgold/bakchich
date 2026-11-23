@@ -14,6 +14,7 @@ import { authorizeConnection } from "#/room/access";
 import { SEATS, TICK_MS } from "#/room/layout";
 import { parseClientMessage } from "#/room/protocol";
 import { pickDisplayedTrial, World } from "#/room/world";
+import { isInHearingVoice } from "#/triggers/hearings";
 import { attempt } from "#/utils/attempt";
 import { env } from "#/utils/env";
 import { logger } from "#/utils/logger";
@@ -140,7 +141,10 @@ const handleMessage = (member: RoomMember, socket: WebSocket, raw: string) => {
     return;
   }
   if (message.type === "vote") {
-    send(socket, { type: "vote-result", result: displayed === null ? "no-trial" : court.vote(displayed.channelId, member.id, message.guilty) });
+    if (displayed === null) send(socket, { type: "vote-result", result: "no-trial" });
+    // Same rule as the Discord buttons: only the members in the voice channel of the trial vote.
+    else if (!isInHearingVoice(displayed.channelId, member.id)) send(socket, { type: "vote-result", result: "not-in-voice" });
+    else send(socket, { type: "vote-result", result: court.vote(displayed.channelId, member.id, message.guilty) });
   }
 };
 

@@ -47,7 +47,7 @@ const aiDefends = async (trial: Trial, stage: "opening" | "closing") => {
 };
 
 const closeDefense = trigger.safeListener("AI lawyer closing", async (trial: Trial) => {
-  if (court.get(trial.channelId)?.id === trial.id) await aiDefends(trial, "closing");
+  if (court.get(trial.channelId)?.id === trial.id && trial.phase === "debate") await aiDefends(trial, "closing");
 });
 
 const handleEvent = async (event: CourtEvent) => {
@@ -64,10 +64,11 @@ const handleEvent = async (event: CourtEvent) => {
     judgeSays(trial.channelId, text);
 
     if (trial.lawyer?.id === AI_LAWYER.id) {
-      await aiDefends(trial, "opening");
+      // Armed first: a slow opening statement must not push the closing one into the vote.
       setTimeout(() => {
         closeDefense(trial);
       }, DEBATE_MS - CLOSING_BEFORE_END_MS).unref();
+      await aiDefends(trial, "opening");
     }
     return;
   }

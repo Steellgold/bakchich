@@ -27,10 +27,11 @@ export const hasPendingHearing = (channelId: string) => pending.has(channelId) |
 
 export const pendingHearing = (channelId: string): Hearing | undefined => pending.get(channelId)?.hearing;
 
-/** Give the waiting hearing of a text channel its lawyer (a member who accepted, or the AI lawyer), false when none is waiting */
-export const setPendingLawyer = async (channelId: string, lawyer: Member): Promise<boolean> => {
+/** Give the waiting hearing of a text channel its lawyer (a member who accepted, or the AI lawyer), false when this hearing is not waiting anymore or the lawyer is one of its parties */
+export const setPendingLawyer = async (channelId: string, lawyer: Member, hearingId: string): Promise<boolean> => {
   const entry = pending.get(channelId);
-  if (entry === undefined) return false;
+  if (entry?.hearing.id !== hearingId) return false;
+  if (lawyer.id === entry.hearing.plaintiffId || entry.hearing.accused.some((member) => member.id === lawyer.id)) return false;
 
   entry.hearing = { ...entry.hearing, lawyer };
   await setHearingLawyer(entry.hearing.id, lawyer);
@@ -44,7 +45,7 @@ const dismantle = async (hearing: Hearing, eventStatus: "canceled" | "completed"
   const guild = await fetchGuild();
   if (hearing.eventId !== null) await setHearingEventStatus(guild, hearing.eventId, eventStatus);
   if (hearing.voiceChannelId !== null) {
-    leaveVoice(guild.id);
+    leaveVoice(guild.id, hearing.voiceChannelId);
     await deleteHearingChannel(guild, hearing.voiceChannelId);
   }
 };
@@ -213,12 +214,18 @@ const removeChannel = trigger.safeListener("Hearing channel removal", async (hea
   if (hearing.voiceChannelId === null) return;
 
   const guild = await fetchGuild();
-  leaveVoice(guild.id);
+  leaveVoice(guild.id, hearing.voiceChannelId);
   await deleteHearingChannel(guild, hearing.voiceChannelId);
 });
 
 /** Voice channel of the trial running in a text channel, null without trial or without voice channel */
 export const voiceChannelOf = (channelId: string): string | null => running.get(channelId)?.voiceChannelId ?? null;
+
+/** Whether a member is in the voice channel of the trial of a text channel (always true when the trial has none) */
+export const isInHearingVoice = (channelId: string, userId: string): boolean => {
+  const voiceChannelId = voiceChannelOf(channelId);
+  return voiceChannelId === null || discordClient.guilds.cache.get(ROYAUME_GUILD_ID)?.voiceStates.cache.get(userId)?.channelId === voiceChannelId;
+};
 
 // Speeches follow each other in the voice channel instead of talking over one another:
 let speaking: Promise<void> = Promise.resolve();

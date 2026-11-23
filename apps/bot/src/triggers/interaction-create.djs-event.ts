@@ -4,7 +4,7 @@ import { court } from "#/court/court";
 import { EMOJI } from "#/court/emojis";
 import { AI_LAWYER } from "#/court/engine";
 import { upsertMember } from "#/court/members";
-import { endPreparation, forceStartAnswers, forceStartHearing, pendingHearing, readyAnswers, setPendingLawyer, voiceChannelOf } from "#/triggers/hearings";
+import { endPreparation, forceStartAnswers, forceStartHearing, isInHearingVoice, pendingHearing, readyAnswers, setPendingLawyer, voiceChannelOf } from "#/triggers/hearings";
 import { trigger } from "#/utils/trigger";
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from "discord.js";
 
@@ -35,15 +35,15 @@ const proposeLawyer = async (interaction: UserSelectMenuInteraction) => {
     allowedMentions: { parse: [], users: [chosen.id] },
     components: [
       new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder().setCustomId(`lawyer-accept:${chosen.id}`).setLabel("Accepter").setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(`lawyer-decline:${chosen.id}`).setLabel("Refuser").setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId(`lawyer-accept:${hearing.id}:${chosen.id}`).setLabel("Accepter").setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`lawyer-decline:${hearing.id}:${chosen.id}`).setLabel("Refuser").setStyle(ButtonStyle.Danger),
       ),
     ],
   });
 };
 
 /** The member picked as a lawyer answers the proposal */
-const answerLawyer = async (interaction: ButtonInteraction, accepted: boolean, chosenId: string | undefined) => {
+const answerLawyer = async (interaction: ButtonInteraction, accepted: boolean, hearingId: string | undefined, chosenId: string | undefined) => {
   if (interaction.user.id !== chosenId) {
     await interaction.reply({ content: `${EMOJI.cross} Cette proposition ne t'est pas adressée.`, flags: MessageFlags.Ephemeral });
     return;
@@ -54,7 +54,7 @@ const answerLawyer = async (interaction: ButtonInteraction, accepted: boolean, c
   }
 
   const lawyer = { id: interaction.user.id, name: interaction.user.displayName };
-  const set = await setPendingLawyer(interaction.channelId, lawyer);
+  const set = hearingId !== undefined && await setPendingLawyer(interaction.channelId, lawyer, hearingId);
   await interaction.update({ content: set ? `${EMOJI.gavel} ${lawyer.name} devient l'avocat de la défense.` : NO_HEARING, components: [] });
 };
 
@@ -82,12 +82,17 @@ trigger.discordEvent("interactionCreate", async (interaction) => {
       return;
     }
 
-    await setPendingLawyer(channelId, AI_LAWYER);
+    const hearing = pendingHearing(channelId);
+    if (hearing === undefined || !(await setPendingLawyer(channelId, AI_LAWYER, hearing.id))) {
+      await interaction.reply({ content: NO_HEARING, flags: MessageFlags.Ephemeral });
+      return;
+    }
+
     await interaction.reply({ content: `${EMOJI.gavel} Les accusés demandent un avocat commis d'office : ${AI_LAWYER.name} plaidera pour eux.` });
     return;
   }
   if (action === "lawyer-accept" || action === "lawyer-decline") {
-    await answerLawyer(interaction, action === "lawyer-accept", argument);
+    await answerLawyer(interaction, action === "lawyer-accept", argument, choice);
     return;
   }
   if (action !== "vote") return;
@@ -101,9 +106,8 @@ trigger.discordEvent("interactionCreate", async (interaction) => {
   }
 
   // The trial is pleaded and voted in its voice channel: only the members there vote.
-  const voiceChannelId = voiceChannelOf(channelId);
-  if (voiceChannelId !== null && interaction.guild?.voiceStates.cache.get(interaction.user.id)?.channelId !== voiceChannelId) {
-    await interaction.reply({ content: `${EMOJI.cross} Pour voter, rejoins le salon vocal <#${voiceChannelId}>.`, flags: MessageFlags.Ephemeral });
+  if (!isInHearingVoice(channelId, interaction.user.id)) {
+    await interaction.reply({ content: `${EMOJI.cross} Pour voter, rejoins le salon vocal <#${voiceChannelOf(channelId) ?? ""}>.`, flags: MessageFlags.Ephemeral });
     return;
   }
 
@@ -111,6 +115,7 @@ trigger.discordEvent("interactionCreate", async (interaction) => {
   const answers: Record<VoteResult, string> = {
     "ok": `${EMOJI.ballotBox} Vote enregistré : ${guilty ? "Coupable" : "Non coupable"}.`,
     "not-allowed": `${EMOJI.cross} L'accusé et le plaignant ne votent pas.`,
+    "not-in-voice": `${EMOJI.cross} Pour voter, rejoins le salon vocal du procès.`,
     "closed": TRIAL_OVER,
     "no-trial": TRIAL_OVER,
   };

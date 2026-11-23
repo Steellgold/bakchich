@@ -68,7 +68,11 @@ export const playInVoice = async (guild: Guild, channelId: string, wav: Buffer, 
   }
 };
 
-export const leaveVoice = (guildId: string): void => {
-  getVoiceConnection(guildId)?.destroy();
+/** Leave the voice channel of a finished hearing, unless the bot has already moved on to another hearing's channel */
+export const leaveVoice = (guildId: string, channelId: string): void => {
+  const connection = getVoiceConnection(guildId);
+  if (connection?.joinConfig.channelId !== channelId) return;
+
+  connection.destroy();
   speakingIds.clear();
 };
