@@ -11,4 +11,5 @@ dayjs.locale("fr");
 dayjs.tz.setDefault("Europe/Paris");
 
 export const day = dayjs;
+
 export type Day = Dayjs;

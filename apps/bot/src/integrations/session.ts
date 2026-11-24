@@ -16,12 +16,25 @@ const SESSION_TIMEOUT_MS = 5_000;
 const sessionSchema = z.object({ user: z.object({ id: z.string() }) }).nullable();
 
 /** Web session behind a browser cookie or an Activity bearer token, with its user's Discord ID */
-export const fetchSession = async (credentials: { cookie: string } | { token: string }): Promise<{ discordId: string | null } | null> => {
+export const fetchSession = async (credentials:
+  | {
+    cookie: string;
+  }
+  | {
+    token: string;
+  }): Promise<{
+    discordId: string | null;
+  } | null> => {
   const headers = "cookie" in credentials ? { cookie: credentials.cookie } : { authorization: `Bearer ${credentials.token}` };
-  const response = await fetch(`${env.WEB_INTERNAL_URL}/api/auth/get-session`, { headers, signal: AbortSignal.timeout(SESSION_TIMEOUT_MS) });
+  const response = await fetch(`${env.WEB_INTERNAL_URL}/api/auth/get-session`, {
+    headers,
+    signal: AbortSignal.timeout(SESSION_TIMEOUT_MS),
+  });
+
   if (!response.ok) return null;
 
   const parsed = sessionSchema.safeParse(await response.json());
+
   if (!parsed.success || parsed.data === null) return null;
 
   const [account] = await postgres
@@ -30,5 +43,7 @@ export const fetchSession = async (credentials: { cookie: string } | { token: st
     .where(and(eq(tableAuthAccount.userId, parsed.data.user.id), eq(tableAuthAccount.providerId, "discord")))
     .limit(1);
 
-  return { discordId: account?.accountId ?? null };
+  return {
+    discordId: account?.accountId ?? null,
+  };
 };

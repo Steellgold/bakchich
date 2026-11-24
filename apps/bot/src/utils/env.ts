@@ -3,7 +3,14 @@ import "dotenv/config";
 import { z } from "zod";
 
 /** Comma-separated Discord IDs ("id1,id2"), spaces and empty entries ignored */
-const idList = (fallback: string) => z.string().default(fallback).transform((value) => value.split(",").map((id) => id.trim()).filter((id) => id !== ""));
+const idList = (fallback: string) => z
+  .string()
+  .default(fallback)
+  .transform((value) => value
+    .split(",")
+    .map((id) => id.trim())
+    .filter((id) => id !== ""),
+  );
 
 const schema = z.object({
   POSTGRESQL_URL: z.url(),
@@ -22,6 +29,12 @@ const schema = z.object({
   PIPER_URL: z.url().default("http://localhost:5000"),
   // Speaker of a multi-speaker Piper voice (8582 of fr_FR-mls-medium by default), empty for a single-speaker voice:
   PIPER_SPEAKER: z.string().default("8582"),
+
+  // Self-hosted whisper.cpp server that transcribes what is said in the hearings (text only, audio never kept):
+  WHISPER_URL: z.url().default("http://localhost:8080"),
+
+  // Public address of the web app: it draws the avatar mosaic of trials with several accused (empty: the first avatar only):
+  WEB_PUBLIC_URL: z.string().default(""),
 
   ROOM_PORT: z.coerce.number().int().default(3001),
   WEB_INTERNAL_URL: z.url().default("http://localhost:3000"),

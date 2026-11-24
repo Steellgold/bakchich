@@ -1,6 +1,6 @@
-import type { Member } from "#/court/engine";
+import type { Gravity, Member, Style } from "#/features/court/engine";
 import { columns } from "#/utils/postgres";
-import { jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 /** Trials announced and waiting for their time, so a restart of the bot loses none of them */
 export const tableHearing = pgTable("hearing", {
@@ -18,6 +18,27 @@ export const tableHearing = pgTable("hearing", {
   /** Voice channel created by the bot for this hearing, deleted after it */
   voiceChannelId: text("voice_channel_id"),
   eventId: text("event_id"),
-  status: text("status", { enum: ["scheduled", "started", "cancelled", "finished"] }).notNull().default("scheduled"),
+  /** Voice room of the defense preparation, deleted after it (or after a restart) */
+  preparationChannelId: text("preparation_channel_id"),
+  style: text("style", {
+    enum: ["american", "french"],
+  })
+    .$type<Style>()
+    .notNull()
+    .default("american"),
+  /** Given by the AI when it screens the accusation: it decides the judgment mode */
+  gravity: text("gravity", {
+    enum: ["light", "ordinary", "serious"],
+  })
+    .$type<Gravity>()
+    .notNull()
+    .default("ordinary"),
+  /** The accused claimed a jury for a light case */
+  juryRequested: boolean("jury_requested").notNull().default(false),
+  status: text("status", {
+    enum: ["scheduled", "started", "cancelled", "finished"],
+  })
+    .notNull()
+    .default("scheduled"),
   createdAt: columns.createdAt,
 });

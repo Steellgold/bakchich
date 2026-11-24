@@ -12,9 +12,9 @@ process.on("uncaughtException", (error, origin) => {
 await migratePostgres();
 
 await discordClientStart(async () => {
-  await import("#/triggers/message-create.djs-event");
-  await import("#/triggers/interaction-create.djs-event");
-  await import("#/triggers/court-events");
-  await import("#/triggers/hearings");
-  await import("#/triggers/room-server");
+  await import("#/features/commands/message-create.djs-event");
+  await import("#/features/commands/interaction-create.djs-event");
+  await import("#/features/court/court-events");
+  await import("#/features/hearings/hearings");
+  await import("#/features/room/room-server");
 });

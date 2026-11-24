@@ -3,8 +3,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./room/*": "./src/room/*.ts",
-    "./court/*": "./src/court/*.ts"
+    "./room/*": "./src/features/room/*.ts",
+    "./court/*": "./src/features/court/*.ts"
   },
   "scripts": {
     "start": "node --import @swc-node/register/esm-register ./src/main.ts",

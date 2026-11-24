@@ -29,67 +29,101 @@ export const conversation = {
 };
 
 export const discordClient = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.MessageContent,
-  ],
-  partials: [
-    Partials.Message,
-  ],
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.MessageContent],
+  partials: [Partials.Message],
 });
 
 /** Category ID of a guild channel (the parent channel's category for a thread), null outside guild channels */
 export const getCategoryId = (channel: Channel): string | null => {
   if (channel.isDMBased()) return null;
   if (channel.isThread()) return channel.parent?.parentId ?? null;
+
   return channel.parentId;
 };
 
 /** Guild member, or null when the user is not (or no longer) in the guild */
-export const findDiscordGuildMember = async (guild: Guild, userId: string, options: { force?: boolean } = {}): Promise<GuildMember | null> => {
+export const findDiscordGuildMember = async (guild: Guild, userId: string, options: {
+  force?: boolean;
+} = {}): Promise<GuildMember | null> => {
   try {
-    return await guild.members.fetch({ user: userId, force: options.force === true });
+    return await guild.members.fetch({
+      user: userId,
+      force: options.force === true,
+    });
   }
   catch (error) {
     if (error instanceof DiscordAPIError && (error.code === RESTJSONErrorCodes.UnknownMember || error.code === RESTJSONErrorCodes.UnknownUser)) return null;
+
     throw error;
   }
 };
 
+/** Guild of a channel (the text channel of a hearing, or its voice channel): hearings may run on several servers */
+export const fetchChannelGuild = async (channelId: string): Promise<Guild> => {
+  const channel = await discordClient.channels.fetch(channelId);
+
+  if (channel === null || channel.isDMBased()) throw new Error(`Channel ${channelId} is not in a guild`);
+
+  return channel.guild;
+};
+
 export const fetchDiscordSendableChannel = async (channelId: string): Promise<SendableChannels> => {
   const channel = await discordClient.channels.fetch(channelId);
+
   if (channel?.isSendable() !== true) throw new Error(`Channel ${channelId} does not support sending messages`);
+
   return channel;
 };
 
-export type RecentAuthor = { id: string; name: string; createdTimestamp: number };
+export type RecentAuthor = {
+  id: string;
+  name: string;
+  createdTimestamp: number;
+};
 
 /** Latest human messages of a channel, oldest first, with their sanitized "<name> : <content>" line */
-export const fetchRecentHumanMessages = async (channel: SendableChannels, limit: number): Promise<{ lines: string[]; authors: RecentAuthor[] }> => {
-  if (!("messages" in channel)) return { lines: [], authors: [] };
+export const fetchRecentHumanMessages = async (channel: SendableChannels, limit: number): Promise<{
+  lines: string[];
+  authors: RecentAuthor[];
+}> => {
+  if (!("messages" in channel)) return {
+    lines: [],
+    authors: [],
+  };
 
-  const messages = [...(await channel.messages.fetch({ limit })).values()]
-    .filter((message) => !message.author.bot)
-    .reverse();
+  const messages = [...(await channel.messages.fetch({ limit })).values()].filter((message) => !message.author.bot).reverse();
 
   return {
     lines: messages.map((message) => `${message.member?.displayName ?? message.author.username} : ${conversation.sanitizeContent(message.content)}`),
-    authors: messages.map((message) => ({ id: message.author.id, name: message.member?.displayName ?? message.author.username, createdTimestamp: message.createdTimestamp })),
+    authors: messages.map((message) => ({
+      id: message.author.id,
+      name: message.member?.displayName ?? message.author.username,
+      createdTimestamp: message.createdTimestamp,
+    })),
   };
 };
 
 /** Side colors of the bot messages, from the website palette: gold for the court, red for refusals and convictions, green for acquittals */
-export const COLOR = { court: 0xDC9E28, refusal: 0xCF3934, acquittal: 0x45A02A } as const;
+export const COLOR = {
+  court: 0xdc9e28,
+  refusal: 0xcf3934,
+  acquittal: 0x45a02a,
+} as const;
 
 /** A plain bot message: an embed with only a description, the date and a color */
 export const embedOf = (text: string, color: number = COLOR.court) => new EmbedBuilder().setDescription(sanitizeDiscordMessage(text)).setColor(color).setTimestamp();
 
 /** Send a plain bot message, which never pings anyone */
-export const sendSafeMessage = async (channel: SendableChannels, text: string, color?: number, components?: MessageCreateOptions["components"]): Promise<Message> => channel.send({
+export const sendSafeMessage = async (
+  channel: SendableChannels,
+  text: string,
+  color?: number,
+  components?: MessageCreateOptions["components"],
+): Promise<Message> => channel.send({
   embeds: [embedOf(text, color)],
-  allowedMentions: { parse: [] },
+  allowedMentions: {
+    parse: [],
+  },
   components,
 });
 
@@ -97,11 +131,20 @@ export const sendSafeMessage = async (channel: SendableChannels, text: string, c
 export const sendPanel = async (channel: SendableChannels, panel: ContainerBuilder): Promise<Message> => channel.send({
   components: [panel],
   flags: MessageFlags.IsComponentsV2,
-  allowedMentions: { parse: [] },
+  allowedMentions: {
+    parse: [],
+  },
 });
 
 /** Scheduled event of a hearing in its voice channel, null when Discord refuses (the hearing then goes on without an event) */
-const createHearingEvent = async (guild: Guild, channelId: string, input: { name: string; description: string; startsAt: Date }): Promise<{ id: string; url: string } | null> => {
+const createHearingEvent = async (guild: Guild, channelId: string, input: {
+  name: string;
+  description: string;
+  startsAt: Date;
+}): Promise<{
+  id: string;
+  url: string;
+} | null> => {
   try {
     const event = await guild.scheduledEvents.create({
       name: sanitizeDiscordMessage(input.name).slice(0, 100),
@@ -111,7 +154,10 @@ const createHearingEvent = async (guild: Guild, channelId: string, input: { name
       entityType: GuildScheduledEventEntityType.Voice,
       channel: channelId,
     });
-    return { id: event.id, url: event.url };
+    return {
+      id: event.id,
+      url: event.url,
+    };
   }
   catch (error) {
     logger.warn(`Could not create the hearing event: ${error instanceof Error ? error.message : String(error)}`);
@@ -120,8 +166,17 @@ const createHearingEvent = async (guild: Guild, channelId: string, input: { name
 };
 
 /** Voice channel and event of a hearing, created in the guild's audio category. Null when the guild has no category or the channel cannot be created: the hearing then opens at once without them. */
-export const createHearingRoom = async (guild: Guild, input: { name: string; description: string; startsAt: Date }): Promise<{ channelId: string; eventId: string | null; eventUrl: string | null } | null> => {
+export const createHearingRoom = async (guild: Guild, input: {
+  name: string;
+  description: string;
+  startsAt: Date;
+}): Promise<{
+  channelId: string;
+  eventId: string | null;
+  eventUrl: string | null;
+} | null> => {
   const parent = voiceCategoryOf(guild);
+
   if (parent === null) return null;
 
   try {
@@ -131,8 +186,13 @@ export const createHearingRoom = async (guild: Guild, input: { name: string; des
       parent,
       reason: "Tribunal hearing",
     });
+
     const event = await createHearingEvent(guild, channel.id, input);
-    return { channelId: channel.id, eventId: event?.id ?? null, eventUrl: event?.url ?? null };
+    return {
+      channelId: channel.id,
+      eventId: event?.id ?? null,
+      eventUrl: event?.url ?? null,
+    };
   }
   catch (error) {
     logger.warn(`Could not create the hearing voice channel: ${error instanceof Error ? error.message : String(error)}`);
@@ -141,8 +201,12 @@ export const createHearingRoom = async (guild: Guild, input: { name: string; des
 };
 
 /** Private-style voice room where the accused prepare their defense, limited to them and their lawyer. Null without audio category or when Discord refuses. */
-export const createPreparationRoom = async (guild: Guild, input: { name: string; places: number }): Promise<string | null> => {
+export const createPreparationRoom = async (guild: Guild, input: {
+  name: string;
+  places: number;
+}): Promise<string | null> => {
   const parent = voiceCategoryOf(guild);
+
   if (parent === null) return null;
 
   try {
@@ -166,7 +230,10 @@ export const registerMessageCommand = async (name: string): Promise<void> => {
   for (const guildId of GUILD_IDS) {
     try {
       const guild = await discordClient.guilds.fetch(guildId);
-      await guild.commands.create({ name, type: ApplicationCommandType.Message });
+      await guild.commands.create({
+        name,
+        type: ApplicationCommandType.Message,
+      });
     }
     catch (error) {
       logger.warn(`Could not register the "${name}" command in guild ${guildId}: ${error instanceof Error ? error.message : String(error)}`);
@@ -218,7 +285,13 @@ export const startDiscordTyping = (channel: SendableChannels, onError: () => voi
 export const discordClientStart = async (loadEvents: () => Promise<void>) => {
   discordClient.once("clientReady", (readyClient) => {
     readyClient.user.setPresence({
-      activities: [{ name: "Custom Status", type: ActivityType.Custom, state: "⚖️ La cour est en session" }],
+      activities: [
+        {
+          name: "Custom Status",
+          type: ActivityType.Custom,
+          state: "⚖️ La cour est en session",
+        },
+      ],
     });
     logger.info(`Discord bot successfully started!! Logged in as ${readyClient.user.tag}`);
   });

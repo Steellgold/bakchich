@@ -1,12 +1,9 @@
-import { HomeClient } from "@/components/home-client";
-import { auth } from "@/lib/auth";
+import { HomeClient } from "@/features/activity/home-client";
 import { requireEnv } from "@/lib/env";
-import { headers } from "next/headers";
 
-const HomePage = async () => {
-  const session = await auth.api.getSession({ headers: await headers() });
+// Read at runtime so one Docker image works for any app:
+export const dynamic = "force-dynamic";
 
-  return <HomeClient clientId={requireEnv("DISCORD_CLIENT_ID")} signedIn={session !== null} />;
-};
+const HomePage = () => <HomeClient clientId={requireEnv("DISCORD_CLIENT_ID")} />;
 
 export default HomePage;

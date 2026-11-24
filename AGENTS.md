@@ -5,7 +5,8 @@ A Discord bot for the « Le Royaume » community: members put each other on tria
 ## Key Patterns
 
 - **Code decides, AI talks** – the court engine owns every rule (phases, timers, votes, verdict, records). The AI writes text from facts the code gives it and may return a structured intent (open a trial, show a record, chat) that the code validates before acting. It never calls Discord or the database itself.
-- **Limited Discord writes** – the bot sends messages, edits its own messages, shows the typing indicator, answers button interactions and creates a voice channel and a scheduled event for each hearing in the audio category (`DISCORD_VOICE_CATEGORY_ID`) deletes the channels it created, joins the voice channel of its hearing to speak in it (text-to-speech) and to see who is speaking (never recording audio), and creates a short-lived voice room where the accused prepare their defense. Nothing else.
+- **Limited Discord writes** – the bot sends messages, edits its own messages, shows the typing indicator, answers button interactions, creates a voice channel and a scheduled event for each hearing in the audio category (`DISCORD_VOICE_CATEGORY_ID`), deletes the channels it created, creates a short-lived voice room where the accused prepare their defense, and registers the « Ouvrir un procès » message command. Nothing else.
+- **Listening, never recording** – the bot joins the voice channel of its hearing (and the preparation room of a court-appointed lawyer) to speak (Piper) and to listen: each utterance is decoded in memory, sent to the self-hosted Whisper service, and only the text is kept (the clerk's transcript). Audio is never written to disk, stored or sent anywhere else.
 - **Stupid on purpose** – the tone is a ridiculous, corrupt judge. Never serious, never moralizing.
 
 ## Agent approach
@@ -28,26 +29,30 @@ A Discord bot for the « Le Royaume » community: members put each other on tria
 
 ## Project Structure
 
-pnpm monorepo with exactly two apps, no shared package:
+pnpm monorepo with exactly two apps, no shared package. Code is organized **by feature**: each feature lives in its own folder with every file it needs, and may have a short `AGENTS.md` with its own rules.
 
-### `apps/bot` — Discord bot, court engine and room server
+### `apps/bot` — Discord bot, court engine and courtroom server
 
-Flat layout under `apps/bot/src`: only folders, only `.ts` files inside them, one `main.ts` at the root.
-
-- `src/court` — The court: Discord-free engine (trials, timers, votes, verdicts), command parsing, AI judge, trial records, known members.
-- `src/room` — The 3D courtroom: layout, Discord-free world simulation (positions, zones, seats) and WebSocket protocol.
+- `src/features/court` — The trial engine (phases, floor, witnesses, objections, votes, verdicts, Discord-free), the AI judge, intents and commands, records and known members, and the court events that turn the engine into messages and speech.
+- `src/features/hearings` — Hearings before and around a trial: request and screening, schedule, lawyers and preparation, jury claims, the voice of the judge and the transcription of what is said, restore after a restart.
+- `src/features/clerk` — The clerk: transcript lines, case files, archive search, member dossiers and courtroom incidents.
+- `src/features/room` — The 3D courtroom: layout, world simulation, chaos of the audience (games, tomatoes, fights), WebSocket protocol, access and server.
+- `src/features/commands` — Discord entry points: mentions of the bot, buttons, the message command and its form.
 - `src/tables` — Drizzle schema, one file per table.
-- `src/integrations` — One file per external system (Discord, OpenRouter, web session): clients, SDK singletons and low-level helpers.
-- `src/triggers` — Entry points (Discord events, room WebSocket server) translating the outside world into court and room calls.
+- `src/integrations` — One file per external system (Discord, voice, OpenRouter, Piper, Whisper, web session): clients and low-level helpers.
 - `src/utils` — Shared helpers, including `postgres` for the Drizzle client, migrations and reusable columns.
 
-Dependencies flow one way: `triggers → court / room / tables / integrations → utils`. No file-level import cycles.
+Dependencies flow one way: `features → tables / integrations → utils`. No file-level import cycles between features.
 
-Files imported by `apps/web` (`src/room/layout.ts`, `src/room/protocol.ts`, `src/court/engine.ts`) MUST use relative imports only, never the `#/` alias.
+Files imported by `apps/web` (`src/features/room/layout.ts`, `protocol.ts`, `world.ts`, `chaos.ts` and `src/features/court/engine.ts`) MUST use relative imports only, never the `#/` alias. The web app only imports types from `engine.ts` (its values pull Node modules into the browser bundle).
 
-### `apps/web` — website, Discord login and 3D client
+### `apps/web` — the Discord Activity
 
-Next.js App Router: `app/` (routes, `.tsx`), `components/` (React components), `lib/` (auth, database, hooks). It imports the room layout and protocol types from `@tribunal/bot`.
+Next.js App Router: `app/` (routes and global styles), `features/` (`activity`: Discord sign-in inside the Activity; `courtroom`: the 3D courtroom, characters, HUD and chaos), `components/` (shared UI), `lib/` (auth, database, environment). The site only renders inside the Discord Activity: anywhere else it shows nothing.
+
+### File size
+
+No file over about 500 lines: past that, split it by responsibility inside its feature folder.
 
 ## Global Guidelines
 

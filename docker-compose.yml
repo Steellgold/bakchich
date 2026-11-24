@@ -28,8 +28,10 @@ services:
       DISCORD_VOICE_CATEGORY_ID: ${DISCORD_VOICE_CATEGORY_ID:-1572558769139752960}
       PIPER_URL: http://tts:5000
       PIPER_SPEAKER: ${PIPER_SPEAKER-8582}
+      WHISPER_URL: http://stt:8080
       ROOM_PORT: "3001"
       WEB_INTERNAL_URL: http://web:3000
+      WEB_PUBLIC_URL: https://tribunal.gaetanhus.fr
     depends_on:
       - postgres
 
@@ -44,6 +46,17 @@ services:
     expose:
       - "5000"
 
+  # Self-hosted ears of the court (whisper.cpp), reached by the bot only: text out, no audio kept.
+  stt:
+    build:
+      context: .
+      dockerfile: docker/whisper.Dockerfile
+      args:
+        WHISPER_MODEL: ${WHISPER_MODEL:-base}
+    restart: unless-stopped
+    expose:
+      - "8080"
+
   web:
     build:
       context: .
@@ -57,7 +70,6 @@ services:
       BETTER_AUTH_URL: https://tribunal.gaetanhus.fr
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:?}
       DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:?}
-      ROOM_WS_URL: wss://tribunal.gaetanhus.fr/ws
     depends_on:
       - postgres
 

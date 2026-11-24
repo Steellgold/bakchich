@@ -10,6 +10,7 @@ export const speak = async (text: string): Promise<Buffer> => {
     body: JSON.stringify(env.PIPER_SPEAKER === "" ? { text } : { text, speaker: env.PIPER_SPEAKER }),
     signal: AbortSignal.timeout(SPEAK_TIMEOUT_MS),
   });
+
   if (!response.ok) throw new Error(`Piper answered ${String(response.status)}`);
 
   // Piper labels its WAV answer as text/html: the body is what counts.

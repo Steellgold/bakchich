@@ -83,10 +83,14 @@ const openRouterProvider = createOpenRouter({
 });
 
 // Preferred free models first, then the free router (random available free model) as last resort:
-const modelIds = [...new Set([
-  ...env.OPENROUTER_MODELS.split(",").map((id) => id.trim()).filter((id) => id !== ""),
-  "openrouter/free",
-])];
+const modelIds = [
+  ...new Set([
+    ...env.OPENROUTER_MODELS.split(",")
+      .map((id) => id.trim())
+      .filter((id) => id !== ""),
+    "openrouter/free",
+  ]),
+];
 
 /** Free models to try in order, the next one being used when the previous one fails */
 export const aiModels = modelIds.map((id) => openRouterProvider(id));

@@ -2,26 +2,71 @@
 
 ---
 
-Discord bot for the « Le Royaume » server: members drag each other in front of a corrupt AI judge for absurd crimes. The room debates and votes, the judge delivers the verdict, and every conviction ends up in a permanent criminal record. A 3D courtroom website lets members log in with Discord, walk around, watch the trial live and vote.
+A Discord bot for the « Le Royaume » server. Members drag each other in front of **Juge Bakchich**, a corrupt AI judge, for absurd crimes. The trial is pleaded out loud in a voice channel, the room votes, and every conviction ends up in a permanent criminal record. A 3D courtroom, played as a Discord Activity, shows the trial live.
 
-Trials only run inside the AGENTS category. Everything shown to users is in French.
+Everything shown to users is in French. Trials only run inside the AGENTS category.
 
-## Apps
+## How a trial goes
 
-- `apps/bot`: Discord bot, court engine and courtroom WebSocket server.
-- `apps/web`: Next.js website with Discord login (BetterAuth) and the 3D courtroom.
+1. **Request**: mention the bot (`@Bakchich ouvre un procès à @membre parce qu'il a volé mon croissant`), or right-click a message, **Applications**, **Ouvrir un procès**, and explain why in the form. The AI clerk screens the accusation (absurd jokes only) and rates its gravity.
+2. **Hearing**: the bot creates a voice channel « Procès de … » and a Discord event. The wait (10 to 30 minutes) depends on how many members are active. Meanwhile the accused pick a lawyer (who must accept), ask for a court-appointed AI lawyer, or claim a jury for a light case. The plaintiff can open the hearing early.
+3. **Preparation**: with a lawyer, the accused get a private voice room for 5 minutes. The AI lawyer listens to them there (or reads what they write).
+4. **Trial**: the code runs the phases and gives the floor; the judge announces each phase out loud.
+   - American style (default): opening, prosecution, defense, witnesses (examination then cross-examination), closing statements. Counsel can shout « objection ! ».
+   - French style (on request): the judge questions the accused, then the plaintiff, the witnesses, the defense and the accused's last word. No objections.
+5. **Judgment**: the gravity decides the mode. Popular jury (members in the voice channel vote), judge alone (light case, or fewer than 3 possible voters), or assizes (jury and judge, the judge's vote counts three times). The corrupt judge may still reverse the vote.
+6. **Verdict**: the AI writes the sentence and the clerk's case file; the trial goes to the casier.
+
+During the hearing the bot listens: what is said is transcribed by the self-hosted Whisper service and typed by the clerk (text only, audio is never kept). The judge reacts to it now and then, objections are detected, and members' characters gesture with the loudness of their voice.
 
 ## Commands
 
-- `@Tribunal procès @member pour <crime>`: opens a trial (5 min of debate, 2 min of voting).
-- `@Tribunal casier @member`: shows the member's criminal record.
-- Right click on a message, **Applications**, **Ouvrir un procès**: a form asks why, then the author of the message goes on trial, the message serving as context. The bot registers this command in each configured server at startup (it needs the `applications.commands` scope).
+| Command | What it does |
+| --- | --- |
+| `@Bakchich procès @membre pour <crime>` | Opens a trial (American style). Plain requests work too, and can ask for a French-style trial. |
+| `@Bakchich casier @membre` | Shows the criminal record: convictions, trials won, testimonies, courtroom incidents, memorable lines. |
+| `@Bakchich j'appelle @membre à la barre` | During the witnesses phase, the prosecution or the defense calls a witness. |
+| `@Bakchich greffier, rappelle les faits` | The clerk recalls the hearing in progress from the transcript. |
+| `@Bakchich tu te souviens du procès de @membre ?` | The clerk searches the archives and answers from the case files. |
+| Right click a message, **Applications**, **Ouvrir un procès** | Puts the author of the message on trial, the message being the context. |
+
+## The courtroom (Discord Activity)
+
+Members enter the 3D courtroom from Discord. They walk around (ZQSD), sit on the benches, become jurors at the gate, and vote during the trial. The audience can also make chaos: throw a tomato (1), whisper an AI rumor (2), play rock-paper-scissors (3) or Connect 4 (4), start a fight (5: the police comes in and writes it in the casier), shout « OBJECTION ! » (O) or fall asleep (B). The site shows nothing outside of Discord.
+
+## Architecture
+
+| Service | What it is |
+| --- | --- |
+| `bot` (`apps/bot`) | Discord bot, trial engine, AI judge and the courtroom WebSocket server. |
+| `web` (`apps/web`) | Next.js app of the Activity: Discord sign-in (BetterAuth) and the 3D courtroom. |
+| `postgres` | Records, hearings, transcripts, members, sessions. |
+| `tts` | Piper: the voice of the judge. |
+| `stt` | whisper.cpp: transcription of the hearings. |
+
+The code is organized by feature (see `AGENTS.md`). The AI runs on free OpenRouter models, with canned fallbacks when they are out of quota.
 
 ## Discord application
 
-- Bot: enable the **Message Content** privileged intent and invite the bot to the server.
-- OAuth2: add the redirect URLs `http://localhost:3000/api/auth/callback/discord` (local) and `https://tribunal.gaetanhus.fr/api/auth/callback/discord` (production).
-- Activity: enable Activities and set the `/` URL mapping to `tribunal.gaetanhus.fr`. This mapping also routes the login API and `/ws` through Discord's proxy. The Activity uses the Embedded App SDK for login and sends its session token to the room; it does not need third-party cookies.
+- **Bot**: enable the **Message Content** privileged intent. Invite it with the `bot` and `applications.commands` scopes, with Manage Channels, Manage Events, Connect and Speak on the audio category.
+- **Activity**: enable Activities and set the `/` URL mapping to the web domain. This mapping also routes the sign-in API and `/ws` through Discord's proxy. Sign-in uses the Embedded App SDK, no third-party cookie is needed.
+
+## Environment variables
+
+Bot (`apps/bot/.env`):
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DISCORD_BOT_TOKEN` | required | Bot token. |
+| `OPENROUTER_API_KEY` | required | OpenRouter key; `OPENROUTER_MODELS` lists preferred free models. |
+| `POSTGRESQL_URL` | required | Database. |
+| `DISCORD_GUILD_ID`, `DISCORD_AGENTS_CATEGORY_ID` | « Le Royaume » | Allowed servers and their AGENTS categories, comma-separated. |
+| `DISCORD_VOICE_CATEGORY_ID` | « Le Royaume » audio category | Where hearing voice channels are created, one per server. Empty opens trials at once, without voice. |
+| `PIPER_URL`, `PIPER_SPEAKER` | `http://localhost:5000`, `8582` | Judge voice. Empty speaker for a single-speaker voice. |
+| `WHISPER_URL` | `http://localhost:8080` | Transcription service. |
+| `ROOM_PORT`, `WEB_INTERNAL_URL` | `3001`, `http://localhost:3000` | Courtroom WebSocket, and where the bot checks sessions. |
+
+Web (`apps/web/.env`): `POSTGRESQL_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`.
 
 ## Run locally
 
@@ -35,28 +80,25 @@ pnpm --filter @tribunal/bot run dev
 pnpm --filter @tribunal/web run dev
 ```
 
-Then open `http://localhost:3000`.
+The voice services are optional locally (the trial goes on without them):
+
+```bash
+docker build -f docker/piper.Dockerfile -t tribunal-tts docker && docker run -p 5000:5000 tribunal-tts
+docker build -f docker/whisper.Dockerfile -t tribunal-stt docker && docker run -p 8080:8080 tribunal-stt
+```
 
 Checks: `pnpm run ts:check`, `pnpm run lint:fix`.
 
-## Deploy on the VPS
+## Deploy
 
-Deployed with [Coolify](https://coolify.io), whose proxy handles domains and HTTPS.
+Deployed with [Coolify](https://coolify.io) from `docker-compose.yml` (branch `stable`):
 
-1. DNS: an `A` record (and `AAAA` for IPv6) `tribunal.gaetanhus.fr` pointing to the VPS.
-2. Coolify: new resource from this repository, Docker Compose build pack, branch `stable`, file `docker-compose.yml`.
-3. Domains, per service:
-   - `web`: `https://tribunal.gaetanhus.fr:3000`
-   - `bot`: `https://tribunal.gaetanhus.fr/ws:3001` (domain with the `/ws` path, internal port 3001)
-4. Environment variables (Coolify asks for each required one; the Postgres password `SERVICE_PASSWORD_64_POSTGRES` is generated by Coolify): `DISCORD_BOT_TOKEN`, `OPENROUTER_API_KEY`, `OPENROUTER_MODELS` (optional), `BETTER_AUTH_SECRET`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`. Optional `DISCORD_VOICE_CATEGORY_ID` (the « Le Royaume » audio category by default): the bot creates a voice channel and a Discord event for each hearing in it, then deletes the channel after the trial. It needs the Manage Channels, Manage Events, Connect and Speak permissions on that category (the judge speaks in the channel with Piper). Trials are pleaded out loud and only the members in the voice channel vote. Leave it empty to open trials at once without channel or event. To run on other servers (a test server, or several at once), set `DISCORD_GUILD_ID`, `DISCORD_AGENTS_CATEGORY_ID` and `DISCORD_VOICE_CATEGORY_ID`: each takes comma-separated IDs (`id1,id2`), with one audio category per server.
+1. DNS: an `A` record (and `AAAA` for IPv6) for the domain, pointing to the VPS.
+2. Coolify: new resource from this repository, Docker Compose build pack.
+3. Domains: `web` on port 3000, `bot` on the same domain with the `/ws` path, port 3001. Sharing the domain lets the session reach the bot.
+4. Variables: Coolify asks for each required one (`SERVICE_PASSWORD_64_POSTGRES` is generated). Optional: `PIPER_VOICE` (another Piper voice), `WHISPER_MODEL` (`base` by default, `small` is more accurate but slower on a CPU). Changing either needs a rebuild of its service.
 5. Deploy.
-
-The website and the courtroom WebSocket share the same domain, so the login cookie reaches the bot.
 
 ## Credits
 
 Base structure from [Bluzzi/discord-agent](https://github.com/Bluzzi/discord-agent).
-
-## Judge voice
-
-The `tts` service of `docker-compose.yml` runs Piper (French voice `fr_FR-mls-medium`, speaker `8582`, built into the image, no account or cost). The optional `PIPER_VOICE` variable builds another voice (then rebuild the `tts` service) and `PIPER_SPEAKER` picks the speaker of a multi-speaker voice; set it empty for a single-speaker voice such as `fr_FR-tom-medium`, `fr_FR-gilles-low` or `fr_FR-siwis-medium`. The bot reaches it through `PIPER_URL` (`http://tts:5000` in Docker, `http://localhost:5000` by default). Locally: `pip install "piper-tts[http]" flask`, `python -m piper.download_voices fr_FR-mls-medium`, then `python -m piper.http_server -m fr_FR-mls-medium`.

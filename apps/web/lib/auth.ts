@@ -13,10 +13,14 @@ const discordCredentials = {
 
 // The Discord ID is never stored on the user (users could edit it): the bot reads it from the account table.
 export const auth = betterAuth({
-  database: drizzleAdapter(db, { provider: "pg", schema }),
+  database: drizzleAdapter(db, {
+    provider: "pg",
+    schema,
+  }),
   trustedOrigins: [`https://${discordCredentials.clientId}.discordsays.com`],
-  plugins: [discordActivityAuth(discordCredentials), bearer()],
-  socialProviders: {
-    discord: discordCredentials,
-  },
+  plugins: [
+    discordActivityAuth(discordCredentials),
+    bearer(),
+  ],
+  socialProviders: { discord: discordCredentials },
 });

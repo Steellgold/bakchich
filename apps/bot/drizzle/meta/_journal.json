@@ -43,6 +43,13 @@
       "when": 1795462656127,
       "tag": "0005_big_wildside",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1795481802552,
+      "tag": "0006_legal_forge",
+      "breakpoints": true
     }
   ]
 }

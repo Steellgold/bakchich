@@ -37,7 +37,11 @@ export const Emblem = () => (
 
 type ButtonVariant = "primary" | "secondary" | "success" | "danger" | "neutral";
 
-type GameButtonProps = Omit<ComponentProps<"button">, "type"> & { variant?: ButtonVariant; loading?: boolean; selected?: boolean };
+type GameButtonProps = Omit<ComponentProps<"button">, "type"> & {
+  variant?: ButtonVariant;
+  loading?: boolean;
+  selected?: boolean;
+};
 
 /** Chamfered game button; the same classes style links that look like buttons */
 export const GameButton = ({ variant = "secondary", loading = false, selected, disabled, className, children, ...rest }: GameButtonProps) => (
@@ -71,7 +75,9 @@ export const GameDialog = ({ title, size = "standard", emblem = <Emblem />, subt
   return (
     <section className={`plate dialog dialog-${size}`} aria-labelledby={titleId}>
       {emblem !== null && <div className="dialog-emblem">{emblem}</div>}
-      <h2 id={titleId} className="dialog-title">{title}</h2>
+      <h2 id={titleId} className="dialog-title">
+        {title}
+      </h2>
       {subtitle}
       {children !== undefined && children !== null && children !== false && <div className="dialog-body">{children}</div>}
       {actions !== undefined && <div className="dialog-actions">{actions}</div>}
