@@ -1,7 +1,7 @@
-import type { Channel, Guild, GuildMember, Message, MessageCreateOptions, SendableChannels } from "discord.js";
+import type { Channel, ContainerBuilder, Guild, GuildMember, Message, MessageCreateOptions, SendableChannels } from "discord.js";
 import { env } from "#/utils/env";
 import { logger } from "#/utils/logger";
-import { ActivityType, ApplicationCommandType, ChannelType, Client, DiscordAPIError, GatewayIntentBits, GuildScheduledEventEntityType, GuildScheduledEventPrivacyLevel, GuildScheduledEventStatus, Partials, RESTJSONErrorCodes } from "discord.js";
+import { ActivityType, ApplicationCommandType, ChannelType, Client, DiscordAPIError, EmbedBuilder, GatewayIntentBits, GuildScheduledEventEntityType, GuildScheduledEventPrivacyLevel, GuildScheduledEventStatus, MessageFlags, Partials, RESTJSONErrorCodes } from "discord.js";
 
 export const DISCORD_MAX_MESSAGE_LENGTH = 2000;
 
@@ -80,11 +80,24 @@ export const fetchRecentHumanMessages = async (channel: SendableChannels, limit:
   };
 };
 
-/** Send a message that can only ping the given users, never @everyone, @here or roles */
-export const sendSafeMessage = async (channel: SendableChannels, content: string, userIds: string[], components?: MessageCreateOptions["components"]): Promise<Message> => channel.send({
-  content: sanitizeDiscordMessage(content),
-  allowedMentions: { parse: [], users: userIds },
+/** Side colors of the bot messages, from the website palette: gold for the court, red for refusals and convictions, green for acquittals */
+export const COLOR = { court: 0xDC9E28, refusal: 0xCF3934, acquittal: 0x45A02A } as const;
+
+/** A plain bot message: an embed with only a description, the date and a color */
+export const embedOf = (text: string, color: number = COLOR.court) => new EmbedBuilder().setDescription(sanitizeDiscordMessage(text)).setColor(color).setTimestamp();
+
+/** Send a plain bot message, which never pings anyone */
+export const sendSafeMessage = async (channel: SendableChannels, text: string, color?: number, components?: MessageCreateOptions["components"]): Promise<Message> => channel.send({
+  embeds: [embedOf(text, color)],
+  allowedMentions: { parse: [] },
   components,
+});
+
+/** Send a rich message laid out with Components V2 (such a message has no text content and no embed), which never pings anyone */
+export const sendPanel = async (channel: SendableChannels, panel: ContainerBuilder): Promise<Message> => channel.send({
+  components: [panel],
+  flags: MessageFlags.IsComponentsV2,
+  allowedMentions: { parse: [] },
 });
 
 /** Scheduled event of a hearing in its voice channel, null when Discord refuses (the hearing then goes on without an event) */

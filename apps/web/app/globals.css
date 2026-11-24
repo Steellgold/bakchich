@@ -661,14 +661,15 @@ kbd {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: 8px 18px 8px 10px;
+  /* The key keeps 6px of face around it, clear of the frame and its chamfer */
+  padding: 11px 20px 11px 11px;
   font: 400 var(--text-lg) / 1.1 var(--font-heading);
   animation: notice-in var(--dur-med) var(--ease-back) both;
 }
 
 .prompt kbd {
-  min-width: 2.2em;
-  height: 2.2em;
+  min-width: 2em;
+  height: 2em;
   font-size: var(--text-md);
 }
 

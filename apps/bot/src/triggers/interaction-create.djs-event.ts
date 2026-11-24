@@ -2,17 +2,19 @@ import type { VoteResult } from "#/court/engine";
 import type { HearingRequest } from "#/triggers/hearings";
 import type { ButtonInteraction, MessageContextMenuCommandInteraction, ModalSubmitInteraction, UserSelectMenuInteraction } from "discord.js";
 import { court } from "#/court/court";
-import { EMOJI } from "#/court/emojis";
 import { AI_LAWYER, MAX_CRIME_LENGTH, normalizeCrime } from "#/court/engine";
 import { upsertMember } from "#/court/members";
-import { AGENTS_CATEGORY_IDS, conversation, discordClient, getCategoryId, registerMessageCommand, sanitizeDiscordMessage } from "#/integrations/discord";
+import { AGENTS_CATEGORY_IDS, COLOR, conversation, discordClient, embedOf, getCategoryId, registerMessageCommand } from "#/integrations/discord";
 import { endPreparation, forceStartAnswers, forceStartHearing, isInHearingVoice, pendingHearing, readyAnswers, requestHearing, setPendingLawyer, voiceChannelOf } from "#/triggers/hearings";
 import { attempt } from "#/utils/attempt";
 import { trigger } from "#/utils/trigger";
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, LabelBuilder, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle } from "discord.js";
 
-const TRIAL_OVER = `${EMOJI.hourglass} Ce procès est terminé.`;
-const NO_HEARING = `${EMOJI.hourglass} Aucune audience n'attend dans ce salon.`;
+const TRIAL_OVER = `Ce procès est terminé.`;
+const NO_HEARING = `Aucune audience n'attend dans ce salon.`;
+
+/** Private answer to the member who clicked: red unless it confirms something */
+const notice = (text: string, color: number = COLOR.refusal) => ({ embeds: [embedOf(text, color)], flags: MessageFlags.Ephemeral as const });
 
 const isAccused = (channelId: string, userId: string) => pendingHearing(channelId)?.accused.some((member) => member.id === userId) === true;
 
@@ -21,20 +23,21 @@ const proposeLawyer = async (interaction: UserSelectMenuInteraction) => {
   const hearing = pendingHearing(interaction.channelId);
   const chosen = interaction.users.first();
   if (hearing === undefined) {
-    await interaction.reply({ content: NO_HEARING, flags: MessageFlags.Ephemeral });
+    await interaction.reply(notice(NO_HEARING));
     return;
   }
   if (!isAccused(interaction.channelId, interaction.user.id)) {
-    await interaction.reply({ content: `${EMOJI.cross} Seuls les accusés choisissent leur avocat.`, flags: MessageFlags.Ephemeral });
+    await interaction.reply(notice(`Seuls les accusés choisissent leur avocat.`));
     return;
   }
   if (chosen === undefined || chosen.bot || chosen.id === hearing.plaintiffId || hearing.accused.some((member) => member.id === chosen.id)) {
-    await interaction.reply({ content: `${EMOJI.cross} Cet avocat n'est pas possible : ni accusé, ni plaignant, ni machine.`, flags: MessageFlags.Ephemeral });
+    await interaction.reply(notice(`Cet avocat n'est pas possible : ni accusé, ni plaignant, ni machine.`));
     return;
   }
 
   await interaction.reply({
-    content: `<@${chosen.id}>, ${interaction.user.displayName} te propose d'être son avocat. Acceptes-tu ?`,
+    content: `<@${chosen.id}>`,
+    embeds: [embedOf(`${interaction.user.displayName} te propose d'être son avocat. Acceptes-tu ?`)],
     allowedMentions: { parse: [], users: [chosen.id] },
     components: [
       new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -48,17 +51,17 @@ const proposeLawyer = async (interaction: UserSelectMenuInteraction) => {
 /** The member picked as a lawyer answers the proposal */
 const answerLawyer = async (interaction: ButtonInteraction, accepted: boolean, hearingId: string | undefined, chosenId: string | undefined) => {
   if (interaction.user.id !== chosenId) {
-    await interaction.reply({ content: `${EMOJI.cross} Cette proposition ne t'est pas adressée.`, flags: MessageFlags.Ephemeral });
+    await interaction.reply(notice(`Cette proposition ne t'est pas adressée.`));
     return;
   }
   if (!accepted) {
-    await interaction.update({ content: `${EMOJI.cross} ${interaction.user.displayName} refuse d'être avocat.`, components: [] });
+    await interaction.update({ embeds: [embedOf(`${interaction.user.displayName} refuse d'être avocat.`, COLOR.refusal)], components: [] });
     return;
   }
 
   const lawyer = { id: interaction.user.id, name: interaction.user.displayName };
   const set = hearingId !== undefined && await setPendingLawyer(interaction.channelId, lawyer, hearingId);
-  await interaction.update({ content: set ? `${EMOJI.gavel} ${lawyer.name} devient l'avocat de la défense.` : NO_HEARING, components: [] });
+  await interaction.update({ embeds: [set ? embedOf(`${lawyer.name} devient l'avocat de la défense.`) : embedOf(NO_HEARING, COLOR.refusal)], components: [] });
 };
 
 /** Right click on a message, Applications: put its author on trial */
@@ -70,11 +73,11 @@ const CONTEXT_LENGTH = 300;
 const askOpenTrial = async (interaction: MessageContextMenuCommandInteraction) => {
   const target = interaction.targetMessage;
   if (interaction.channel === null || !AGENTS_CATEGORY_IDS.includes(getCategoryId(interaction.channel) ?? "")) {
-    await interaction.reply({ content: `${EMOJI.courthouse} Le Tribunal ne siège que dans la catégorie AGENTS.`, flags: MessageFlags.Ephemeral });
+    await interaction.reply(notice(`Le Tribunal ne siège que dans la catégorie AGENTS.`));
     return;
   }
   if (target.author.id === interaction.user.id) {
-    await interaction.reply({ content: `${EMOJI.courthouse} La cour ne te laisse pas te juger toi-même.`, flags: MessageFlags.Ephemeral });
+    await interaction.reply(notice(`La cour ne te laisse pas te juger toi-même.`));
     return;
   }
 
@@ -92,23 +95,23 @@ const submitOpenTrial = async (interaction: ModalSubmitInteraction, messageId: s
   const botUser = discordClient.user;
   const channel = interaction.channel;
   if (!interaction.inCachedGuild() || botUser === null || channel === null || !channel.isSendable() || messageId === undefined) {
-    await interaction.reply({ content: `${EMOJI.cross} Ce procès ne peut pas s'ouvrir ici.`, flags: MessageFlags.Ephemeral });
+    await interaction.reply(notice(`Ce procès ne peut pas s'ouvrir ici.`));
     return;
   }
 
   const crime = normalizeCrime(interaction.fields.getTextInputValue("crime"));
   if (crime === null) {
-    await interaction.reply({ content: `${EMOJI.cross} Motif invalide : entre 1 et ${String(MAX_CRIME_LENGTH)} caractères.`, flags: MessageFlags.Ephemeral });
+    await interaction.reply(notice(`Motif invalide : entre 1 et ${String(MAX_CRIME_LENGTH)} caractères.`));
     return;
   }
 
   // The checks take several seconds: Discord only waits 3 for an answer.
   await interaction.deferReply();
-  const answer = async (content: string, components?: Parameters<HearingRequest["reply"]>[1]) => interaction.editReply({ content: sanitizeDiscordMessage(content), allowedMentions: { parse: [] }, components });
+  const answer: HearingRequest["reply"] = async (text, color, components) => interaction.editReply({ embeds: [embedOf(text, color)], allowedMentions: { parse: [] }, components });
 
   const fetched = await attempt(async () => channel.messages.fetch(messageId));
   if (!fetched.ok) {
-    await answer(`${EMOJI.documentSearch} Ce message a disparu, la cour ne peut plus le juger.`);
+    await answer("Ce message a disparu, la cour ne peut plus le juger.", COLOR.refusal);
     return;
   }
 
@@ -141,26 +144,28 @@ trigger.discordEvent("interactionCreate", async (interaction) => {
   const channelId = interaction.channelId;
 
   if (action === "hearing-start") {
-    await interaction.reply({ content: forceStartAnswers[forceStartHearing(channelId, interaction.user.id)], flags: MessageFlags.Ephemeral });
+    const result = forceStartHearing(channelId, interaction.user.id);
+    await interaction.reply(notice(forceStartAnswers[result], result === "started" ? COLOR.court : COLOR.refusal));
     return;
   }
   if (action === "hearing-ready") {
-    await interaction.reply({ content: readyAnswers[endPreparation(channelId, interaction.user.id)], flags: MessageFlags.Ephemeral });
+    const result = endPreparation(channelId, interaction.user.id);
+    await interaction.reply(notice(readyAnswers[result], result === "ended" ? COLOR.court : COLOR.refusal));
     return;
   }
   if (action === "hearing-ai-lawyer") {
     if (!isAccused(channelId, interaction.user.id)) {
-      await interaction.reply({ content: pendingHearing(channelId) === undefined ? NO_HEARING : `${EMOJI.cross} Seuls les accusés demandent un avocat commis d'office.`, flags: MessageFlags.Ephemeral });
+      await interaction.reply(notice(pendingHearing(channelId) === undefined ? NO_HEARING : `Seuls les accusés demandent un avocat commis d'office.`));
       return;
     }
 
     const hearing = pendingHearing(channelId);
     if (hearing === undefined || !(await setPendingLawyer(channelId, AI_LAWYER, hearing.id))) {
-      await interaction.reply({ content: NO_HEARING, flags: MessageFlags.Ephemeral });
+      await interaction.reply(notice(NO_HEARING));
       return;
     }
 
-    await interaction.reply({ content: `${EMOJI.gavel} Les accusés demandent un avocat commis d'office : ${AI_LAWYER.name} plaidera pour eux.` });
+    await interaction.reply({ embeds: [embedOf(`Les accusés demandent un avocat commis d'office : ${AI_LAWYER.name} plaidera pour eux.`)] });
     return;
   }
   if (action === "lawyer-accept" || action === "lawyer-decline") {
@@ -173,26 +178,27 @@ trigger.discordEvent("interactionCreate", async (interaction) => {
 
   // Buttons of a finished trial, or of a trial lost in a restart:
   if (court.get(channelId)?.id !== trialId) {
-    await interaction.reply({ content: TRIAL_OVER, flags: MessageFlags.Ephemeral });
+    await interaction.reply(notice(TRIAL_OVER));
     return;
   }
 
   // The trial is pleaded and voted in its voice channel: only the members there vote.
   if (!isInHearingVoice(channelId, interaction.user.id)) {
-    await interaction.reply({ content: `${EMOJI.cross} Pour voter, rejoins le salon vocal <#${voiceChannelOf(channelId) ?? ""}>.`, flags: MessageFlags.Ephemeral });
+    await interaction.reply(notice(`Pour voter, rejoins le salon vocal <#${voiceChannelOf(channelId) ?? ""}>.`));
     return;
   }
 
   const guilty = choice === "guilty";
   const answers: Record<VoteResult, string> = {
-    "ok": `${EMOJI.ballotBox} Vote enregistré : ${guilty ? "Coupable" : "Non coupable"}.`,
-    "not-allowed": `${EMOJI.cross} L'accusé et le plaignant ne votent pas.`,
-    "not-in-voice": `${EMOJI.cross} Pour voter, rejoins le salon vocal du procès.`,
+    "ok": `Vote enregistré : ${guilty ? "Coupable" : "Non coupable"}.`,
+    "not-allowed": `L'accusé et le plaignant ne votent pas.`,
+    "not-in-voice": `Pour voter, rejoins le salon vocal du procès.`,
     "closed": TRIAL_OVER,
     "no-trial": TRIAL_OVER,
   };
 
   // Reply first: Discord only waits 3 seconds for an interaction answer.
-  await interaction.reply({ content: answers[court.vote(channelId, interaction.user.id, guilty)], flags: MessageFlags.Ephemeral });
+  const result = court.vote(channelId, interaction.user.id, guilty);
+  await interaction.reply(notice(answers[result], result === "ok" ? COLOR.court : COLOR.refusal));
   await upsertMember({ id: interaction.user.id, name: interaction.user.displayName, avatarUrl: interaction.user.displayAvatarURL({ extension: "png", size: 128 }) });
 });

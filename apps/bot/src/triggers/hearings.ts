@@ -2,12 +2,11 @@ import type { Member } from "#/court/engine";
 import type { Hearing } from "#/court/hearings";
 import type { Guild, SendableChannels } from "discord.js";
 import { court, judge } from "#/court/court";
-import { EMOJI } from "#/court/emojis";
 import { AI_LAWYER, formatNames, MAX_ACCUSED } from "#/court/engine";
 import { countActiveMembers, hearingDelayMs } from "#/court/hearing";
 import { fetchUnfinishedHearings, saveHearing, setHearingLawyer, setHearingStatus } from "#/court/hearings";
 import { upsertMember } from "#/court/members";
-import { createHearingRoom, createPreparationRoom, deleteHearingChannel, discordClient, fetchDiscordSendableChannel, fetchRecentHumanMessages, findDiscordGuildMember, sendSafeMessage, setHearingEventStatus } from "#/integrations/discord";
+import { createHearingRoom, createPreparationRoom, deleteHearingChannel, COLOR, discordClient, fetchDiscordSendableChannel, fetchRecentHumanMessages, findDiscordGuildMember, sendSafeMessage, setHearingEventStatus } from "#/integrations/discord";
 import { speak } from "#/integrations/piper";
 import { leaveVoice, playInVoice, watchSpeakers } from "#/integrations/voice";
 import { attempt } from "#/utils/attempt";
@@ -61,7 +60,7 @@ const dismantle = async (hearing: Hearing, eventStatus: "canceled" | "completed"
 const cancelHearing = async (hearing: Hearing, text: string) => {
   await setHearingStatus(hearing.id, "cancelled");
   await dismantle(hearing, "canceled");
-  await sendSafeMessage(await fetchDiscordSendableChannel(hearing.channelId), text, []);
+  await sendSafeMessage(await fetchDiscordSendableChannel(hearing.channelId), text, COLOR.refusal);
 };
 
 const watch = trigger.safeListener("Voice speakers", async (voiceChannelId: string) => {
@@ -79,7 +78,7 @@ const openTrial = async (hearing: Hearing, accused: Member[], context: string[])
     crime: hearing.crime,
   });
   if (trial === "busy") {
-    await cancelHearing(hearing, "⏳ L'audience est annulée : la cour est occupée dans ce salon.");
+    await cancelHearing(hearing, "L'audience est annulée : la cour est occupée dans ce salon.");
     return;
   }
 
@@ -110,9 +109,9 @@ const finishPreparation = trigger.safeListener("Hearing preparation end", async 
 export type ReadyResult = "ended" | "none" | "not-allowed";
 
 export const readyAnswers: Record<ReadyResult, string> = {
-  "ended": "⚖️ La préparation est terminée, le procès s'ouvre.",
-  "none": "⏳ Aucune préparation en cours dans ce salon.",
-  "not-allowed": "🚫 Seuls les accusés et leur avocat peuvent terminer la préparation.",
+  "ended": "La préparation est terminée, le procès s'ouvre.",
+  "none": "Aucune préparation en cours dans ce salon.",
+  "not-allowed": "Seuls les accusés et leur avocat peuvent terminer la préparation.",
 };
 
 /** End the preparation of the defense right now, for the accused and their lawyer only */
@@ -153,8 +152,8 @@ const prepareDefense = async (hearing: Hearing, accused: Member[], lawyer: Membe
     }, PREPARATION_MS),
   });
 
-  const text = ai ? `📂 Préparation de la défense de ${names} avec ${lawyer.name} : ${minutes} minutes, dans <#${roomId}> (${String(places)} places). Écrivez ici, sans mentionner le bot, le contexte de l'affaire : votre avocat commis d'office le lira. Le procès s'ouvre ensuite, ou dès que vous cliquez sur « C'est bon ».` : `📂 Préparation de la défense : ${names} et ${lawyer.name} ont ${minutes} minutes dans <#${roomId}> (${String(places)} places). Le procès s'ouvre ensuite, ou dès que vous cliquez sur « C'est bon ».`;
-  await sendSafeMessage(channel, text, [...accused.map((member) => member.id), ...(ai ? [] : [lawyer.id])], readyButton());
+  const text = ai ? `Préparation de la défense de ${names} avec ${lawyer.name} : ${minutes} minutes, dans <#${roomId}> (${String(places)} places). Écrivez ici, sans mentionner le bot, le contexte de l'affaire : votre avocat commis d'office le lira. Le procès s'ouvre ensuite, ou dès que vous cliquez sur « C'est bon ».` : `Préparation de la défense : ${names} et ${lawyer.name} ont ${minutes} minutes dans <#${roomId}> (${String(places)} places). Le procès s'ouvre ensuite, ou dès que vous cliquez sur « C'est bon ».`;
+  await sendSafeMessage(channel, text, COLOR.court, readyButton());
 };
 
 const startHearing = async (hearing: Hearing) => {
@@ -165,12 +164,12 @@ const startHearing = async (hearing: Hearing) => {
   const present = found.flatMap(({ member }) => (member === null ? [] : [member]));
 
   if (present.length === 0) {
-    await cancelHearing(hearing, "⚖️ L'audience est annulée : les accusés ont quitté le Royaume.");
+    await cancelHearing(hearing, "L'audience est annulée : les accusés ont quitté le Royaume.");
     return;
   }
 
   const left = found.filter(({ member }) => member === null).map(({ accused }) => accused.name);
-  if (left.length > 0) await sendSafeMessage(await fetchDiscordSendableChannel(hearing.channelId), `⚖️ Ont quitté le Royaume avant l'audience : ${left.join(", ")}.`, []);
+  if (left.length > 0) await sendSafeMessage(await fetchDiscordSendableChannel(hearing.channelId), `Ont quitté le Royaume avant l'audience : ${left.join(", ")}.`);
 
   const accused = present.map((member) => ({ id: member.id, name: member.displayName }));
   await Promise.all(present.map(async (member) => upsertMember({ id: member.id, name: member.displayName, avatarUrl: member.displayAvatarURL({ extension: "png", size: 128 }) })));
@@ -202,9 +201,9 @@ export const scheduleHearing = (hearing: Hearing): void => {
 export type ForceStartResult = "started" | "none" | "not-plaintiff";
 
 export const forceStartAnswers: Record<ForceStartResult, string> = {
-  "started": "⚖️ L'audience s'ouvre maintenant.",
-  "none": "⏳ Aucune audience n'attend dans ce salon.",
-  "not-plaintiff": "🚫 Seul celui qui a lancé le procès peut l'ouvrir plus tôt.",
+  "started": "L'audience s'ouvre maintenant.",
+  "none": "Aucune audience n'attend dans ce salon.",
+  "not-plaintiff": "Seul celui qui a lancé le procès peut l'ouvrir plus tôt.",
 };
 
 /** Open the waiting hearing of a text channel right now, for the member who requested it only */
@@ -288,30 +287,30 @@ export type HearingRequest = {
   channel: SendableChannels;
   guild: Guild;
   plaintiff: Member;
-  reply: (content: string, components?: ReturnType<typeof hearingComponents>) => Promise<unknown>;
+  reply: (text: string, color?: number, components?: ReturnType<typeof hearingComponents>) => Promise<unknown>;
 };
 
 /** Check the accusation, then announce the hearing: its time comes from the active members, and the Discord event announces it */
 const openHearing = async (request: HearingRequest, accusedIds: string[], crime: string, botId: string, context: string | null) => {
   const { channel, guild } = request;
   if (court.get(channel.id) !== undefined || hasPendingHearing(channel.id)) {
-    await request.reply(`${EMOJI.hourglass} La cour est occupée, revenez plus tard.`);
+    await request.reply("La cour est occupée, revenez plus tard.", COLOR.refusal);
     return;
   }
 
   if (accusedIds.length > MAX_ACCUSED) {
-    await request.reply(`${EMOJI.courthouse} La cour ne juge pas plus de ${String(MAX_ACCUSED)} individus à la fois.`);
+    await request.reply(`La cour ne juge pas plus de ${String(MAX_ACCUSED)} individus à la fois.`, COLOR.refusal);
     return;
   }
 
   const found = await Promise.all(accusedIds.map(async (id) => findDiscordGuildMember(guild, id)));
   const accused = found.filter((member) => member !== null);
   if (accused.length !== found.length) {
-    await request.reply(`${EMOJI.documentSearch} ${accused.length === 0 ? "Cet individu est inconnu" : "Un de ces individus est inconnu"} du Royaume.`);
+    await request.reply(`${accused.length === 0 ? "Cet individu est inconnu" : "Un de ces individus est inconnu"} du Royaume.`, COLOR.refusal);
     return;
   }
   if (accused.some((member) => member.user.bot && member.id !== botId)) {
-    await request.reply(`${EMOJI.courthouse} La cour ne juge pas les machines. Sauf elle-même.`);
+    await request.reply("La cour ne juge pas les machines. Sauf elle-même.", COLOR.refusal);
     return;
   }
 
@@ -319,7 +318,7 @@ const openHearing = async (request: HearingRequest, accusedIds: string[], crime:
   const recent = await fetchRecentHumanMessages(channel, LAWYER_LOOKUP_MESSAGES);
   const screening = await judge.screen(crime, names, [...(context === null ? [] : [context]), ...recent.lines.slice(-SCREENING_CONTEXT_MESSAGES)]);
   if (!screening.ok) {
-    await request.reply(`${EMOJI.alertShield} ${screening.reply}`);
+    await request.reply(screening.reply, COLOR.refusal);
     return;
   }
 
@@ -344,10 +343,10 @@ const openHearing = async (request: HearingRequest, accusedIds: string[], crime:
 
   // Without voice channel the trial opens at once and announces itself; the request still gets an answer (an interaction must be answered).
   if (room === null) {
-    await request.reply(`${EMOJI.courthouse} Procès de ${names} pour « ${crime} » : l'audience s'ouvre maintenant.`);
+    await request.reply(`Procès de ${names} pour « ${crime} » : l'audience s'ouvre maintenant.`);
     return;
   }
-  await request.reply(`${EMOJI.courthouse} Procès de ${names} pour « ${crime} » : l'audience s'ouvre <t:${String(Math.round(startsAt.getTime() / 1000))}:R>. Rendez-vous dans <#${room.channelId}>. Les accusés ont jusque-là pour choisir un avocat, qui doit accepter, ou demander un avocat commis d'office.${room.eventUrl === null ? "" : ` Événement : ${room.eventUrl}`}`, hearingComponents());
+  await request.reply(`Procès de ${names} pour « ${crime} » : l'audience s'ouvre <t:${String(Math.round(startsAt.getTime() / 1000))}:R>. Rendez-vous dans <#${room.channelId}>. Les accusés ont jusque-là pour choisir un avocat, qui doit accepter, ou demander un avocat commis d'office.${room.eventUrl === null ? "" : ` Événement : ${room.eventUrl}`}`, COLOR.court, hearingComponents());
 };
 
 // Channels with a request being checked: the checks take several seconds, two requests must not both pass them.
@@ -356,7 +355,7 @@ const requesting = new Set<string>();
 /** Ask the court for a hearing, one request at a time per channel */
 export const requestHearing = async (request: HearingRequest, accusedIds: string[], crime: string, botId: string, context: string | null): Promise<void> => {
   if (requesting.has(request.channel.id)) {
-    await request.reply(`${EMOJI.hourglass} La cour est occupée, revenez plus tard.`);
+    await request.reply("La cour est occupée, revenez plus tard.", COLOR.refusal);
     return;
   }
 
