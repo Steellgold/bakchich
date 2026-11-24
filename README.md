@@ -1,4 +1,6 @@
-# Tribunal
+<img width="2172" height="724" alt="Juge Bakchich au tribunal royal" src="https://github.com/user-attachments/assets/b872b0d7-66c3-46e8-8b28-568825ff2d2a" />
+
+---
 
 Discord bot for the « Le Royaume » server: members drag each other in front of a corrupt AI judge for absurd crimes. The room debates and votes, the judge delivers the verdict, and every conviction ends up in a permanent criminal record. A 3D courtroom website lets members log in with Discord, walk around, watch the trial live and vote.
 
