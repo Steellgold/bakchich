@@ -15,7 +15,9 @@ Everything shown to users is in French. Trials only run inside the AGENTS catego
    - American style (default): opening, prosecution, defense, witnesses (examination then cross-examination), closing statements. Counsel can shout « objection ! ».
    - French style (on request): the judge questions the accused, then the plaintiff, the witnesses, the defense and the accused's last word. No objections.
 5. **Judgment**: the gravity decides the mode. Popular jury (members in the voice channel vote), judge alone (light case, or fewer than 3 possible voters), or assizes (jury and judge, the judge's vote counts three times). The corrupt judge may still reverse the vote.
-6. **Verdict**: the AI writes the sentence and the clerk's case file; the trial goes to the casier.
+6. **Verdict**: the convicted get a real sentence, enforced by the bot in every text channel for 30 minutes to 2 hours: end every message with a phrase the judge made up (« avec ce doux fromage »), start with a formula, never write a banned word, or write in capitals. Each slip extends it: the bot replies once, then only reacts with the sentence emoji for 5 minutes. The clerk writes the case file and the trial goes to the casier.
+
+The judge never forgets anyone: from what members write on the server (except excluded channels) and say in hearings, the clerk keeps short notes on each one (temperament, humor, habits, memorable actions), and the judge uses them to adapt his tone. Only these notes are stored, never the messages, and the updates are rationed to spare the AI quota.
 
 During the hearing the bot listens: what is said is transcribed by the self-hosted Whisper service and typed by the clerk (text only, audio is never kept). The judge reacts to it now and then, objections are detected, and members' characters gesture with the loudness of their voice.
 
@@ -29,10 +31,12 @@ During the hearing the bot listens: what is said is transcribed by the self-host
 | `@Bakchich greffier, rappelle les faits` | The clerk recalls the hearing in progress from the transcript. |
 | `@Bakchich tu te souviens du procès de @membre ?` | The clerk searches the archives and answers from the case files. |
 | Right click a message, **Applications**, **Ouvrir un procès** | Puts the author of the message on trial, the message being the context. |
+| `/fiche [membre]` | Shows what the judge knows about you, or about someone: the clerk's notes and their record in court. Only you see it. |
+| `/chexclude salon` | For members who manage channels: excludes a channel or category from sentence reminders (or includes it again). |
 
 ## The courtroom (Discord Activity)
 
-Members enter the 3D courtroom from Discord. They walk around (ZQSD), sit on the benches, become jurors at the gate, and vote during the trial. The audience can also make chaos: throw a tomato (1), whisper an AI rumor (2), play rock-paper-scissors (3) or Connect 4 (4), start a fight (5: the police comes in and writes it in the casier), shout « OBJECTION ! » (O) or fall asleep (B). The site shows nothing outside of Discord.
+Members enter the 3D courtroom from Discord. They walk around (ZQSD, Shift to run, Space to jump), sit on the benches, become jurors at the gate, and vote during the trial. The audience can also make chaos: throw a tomato (1), whisper an AI rumor (2), play rock-paper-scissors (3) or Connect 4 (4), start a fight (5: the police comes in and writes it in the casier), shout « OBJECTION ! » (O) or fall asleep (B). In the back-left corner, the archive cabinet holds the clerk's file on every member (E to read). The site shows nothing outside of Discord.
 
 ## Architecture
 
@@ -48,7 +52,7 @@ The code is organized by feature (see `AGENTS.md`). The AI runs on free OpenRout
 
 ## Discord application
 
-- **Bot**: enable the **Message Content** privileged intent. Invite it with the `bot` and `applications.commands` scopes, with Manage Channels, Manage Events, Connect and Speak on the audio category.
+- **Bot**: enable the **Message Content** privileged intent. Invite it with the `bot` and `applications.commands` scopes, with Manage Channels, Manage Events, Connect and Speak on the audio category, and Add Reactions where sentences are enforced.
 - **Activity**: enable Activities and set the `/` URL mapping to the web domain. This mapping also routes the sign-in API and `/ws` through Discord's proxy. Sign-in uses the Embedded App SDK, no third-party cookie is needed.
 
 ## Environment variables

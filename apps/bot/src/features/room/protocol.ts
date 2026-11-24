@@ -15,6 +15,8 @@ const clientMessageSchema = z.discriminatedUnion("type", [
     x: z.number(),
     z: z.number(),
     rotation: z.number(),
+    /** Shift held: the member runs */
+    running: z.boolean().optional(),
   }),
   z.object({ type: z.literal("become-juror") }),
   z.object({ type: z.literal("sit-on-bench") }),
@@ -57,6 +59,8 @@ const clientMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("quit-game") }),
   z.object({ type: z.literal("toggle-sleep") }),
   z.object({ type: z.literal("shout-objection") }),
+  z.object({ type: z.literal("jump") }),
+  z.object({ type: z.literal("open-archives") }),
 ]);
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
@@ -74,6 +78,13 @@ export type TrialView = {
   /** Who the court gives the floor to */
   floor: Floor;
   endsAt: number;
+};
+
+export type ArchiveFile = {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  profile: string;
 };
 
 export type Npc = {
@@ -116,8 +127,12 @@ export type ServerMessage = {
   toId: string;
 } | {
   type: "effect";
-  kind: "objection";
+  kind: "objection" | "jump";
   fromId: string;
+} | {
+  type: "archives";
+  /** The clerk's files, read at the archive cabinet */
+  files: ArchiveFile[];
 } | {
   type: "rumor";
   fromName: string;

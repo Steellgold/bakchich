@@ -17,4 +17,8 @@ await discordClientStart(async () => {
   await import("#/features/court/court-events");
   await import("#/features/hearings/hearings");
   await import("#/features/room/room-server");
+  await import("#/features/penalties/penalty-watcher");
+  await import("#/features/penalties/exclude-command");
+  await import("#/features/profiles/profile-watcher");
+  await import("#/features/profiles/profile-command");
 });

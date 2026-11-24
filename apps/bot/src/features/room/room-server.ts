@@ -10,9 +10,10 @@ import { floorOf } from "#/features/court/engine";
 import { formatVerdictLine } from "#/features/court/judge";
 import { listKnownMembers, upsertMember } from "#/features/court/members";
 import { isInHearingVoice, judgeSays } from "#/features/hearings/hearings";
+import { listFiles } from "#/features/profiles/profiles";
 import { authorizeConnection } from "#/features/room/access";
 import { Chaos, CHAOS_REACH } from "#/features/room/chaos";
-import { MAX_SPEED, SEATS, TICK_MS } from "#/features/room/layout";
+import { ARCHIVES, ARCHIVES_RADIUS, MAX_SPEED, RUN_SPEED, SEATS, TICK_MS } from "#/features/room/layout";
 import { parseClientMessage } from "#/features/room/protocol";
 import { pickDisplayedTrial, World } from "#/features/room/world";
 import { AGENTS_CATEGORY_IDS, discordClient, findDiscordGuildMember, GUILD_IDS } from "#/integrations/discord";
@@ -28,10 +29,10 @@ import { WebSocket, WebSocketServer } from "ws";
 
 const AUTH_TIMEOUT_MS = 5_000;
 /**
- * Distance a member may walk refills at MAX_SPEED and is spent by their moves. Moves bunched by network jitter
+ * Distance a member may walk refills at MAX_SPEED (RUN_SPEED while running) and is spent by their moves. Moves bunched by network jitter
  * still catch up with the client, while the average speed stays capped; the cap keeps a burst after a lag spike short.
  */
-const MAX_MOVE_BUDGET = MAX_SPEED * 0.5;
+const MAX_MOVE_BUDGET = RUN_SPEED * 0.5;
 const KNOWN_MEMBERS_REFRESH_MS = 60_000;
 const KNOWN_MEMBERS_LIMIT = 100;
 /** Client messages are tiny JSON intents */
@@ -378,6 +379,42 @@ const handleChaos = (member: RoomMember, socket: WebSocket, message: ClientMessa
   world.standUp(target.id);
 };
 
+/** A jump is a short hop everyone sees: no physics, only while standing and free, once per JUMP_GAP_MS */
+const JUMP_GAP_MS = 700;
+const lastJumps = new Map<string, number>();
+
+const jump = (id: string) => {
+  const now = Date.now();
+
+  if (world.player(id)?.seatId !== null || chaos.isFighting(id) || now - (lastJumps.get(id) ?? 0) < JUMP_GAP_MS) return;
+
+  lastJumps.set(id, now);
+  chaos.wake(id);
+  broadcast({
+    type: "effect",
+    kind: "jump",
+    fromId: id,
+  });
+};
+
+/** A member at the archive cabinet reads the clerk's files */
+const openArchives = trigger.safeListener("Archives", async (id: string, socket: WebSocket) => {
+  const position = world.player(id)?.position;
+
+  if (position === undefined || Math.hypot(position.x - ARCHIVES.x, position.z - ARCHIVES.z) > ARCHIVES_RADIUS + 0.5) return;
+
+  const files = await listFiles();
+  send(socket, {
+    type: "archives",
+    files: files.map((file) => ({
+      id: file.id,
+      name: file.name,
+      avatarUrl: file.avatarUrl,
+      profile: file.profile ?? "",
+    })),
+  });
+});
+
 const handleMessage = (member: RoomMember, socket: WebSocket, raw: string) => {
   const message = parseClientMessage(raw);
 
@@ -389,11 +426,12 @@ const handleMessage = (member: RoomMember, socket: WebSocket, raw: string) => {
 
     chaos.wake(member.id);
     const now = Date.now();
+    const speed = message.running === true ? RUN_SPEED : MAX_SPEED;
     const previous = moveBudgets.get(member.id) ?? {
-      distance: (MAX_SPEED * TICK_MS) / 1_000,
+      distance: (speed * TICK_MS) / 1_000,
       at: now,
     };
-    const budget = Math.min(previous.distance + (MAX_SPEED * (now - previous.at)) / 1_000, MAX_MOVE_BUDGET);
+    const budget = Math.min(previous.distance + (speed * (now - previous.at)) / 1_000, MAX_MOVE_BUDGET);
     const walked = world.move(
       member.id,
       {
@@ -423,6 +461,14 @@ const handleMessage = (member: RoomMember, socket: WebSocket, raw: string) => {
   }
   if (message.type === "stand-up") {
     world.standUp(member.id);
+    return;
+  }
+  if (message.type === "open-archives") {
+    openArchives(member.id, socket);
+    return;
+  }
+  if (message.type === "jump") {
+    jump(member.id);
     return;
   }
   if (message.type === "vote") {

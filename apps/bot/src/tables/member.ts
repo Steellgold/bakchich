@@ -6,4 +6,7 @@ export const tableMember = pgTable("member", {
   name: text("name").notNull(),
   avatarUrl: text("avatar_url"),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  /** What the judge knows about the member: temperament, humor, habits, memorable actions (notes written by the clerk) */
+  profile: text("profile"),
+  profiledAt: timestamp("profiled_at", { withTimezone: true }),
 });

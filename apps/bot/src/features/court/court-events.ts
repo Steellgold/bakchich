@@ -7,6 +7,8 @@ import { AI_LAWYER, debateMs, formatNames, sideOf, VOTE_MS } from "#/features/co
 import { formatVerdictLine, verdictDetails } from "#/features/court/judge";
 import { saveTrial } from "#/features/court/record";
 import { completeHearing, defenseContextOf, judgeSays, voiceChannelOf } from "#/features/hearings/hearings";
+import { sentence as sentenceTrial } from "#/features/penalties/sentencing";
+import { knownAbout, noteLine } from "#/features/profiles/profiles";
 import { COLOR, discordClient, fetchDiscordSendableChannel, sanitizeDiscordMessage, sendPanel, sendSafeMessage, startDiscordTyping } from "#/integrations/discord";
 import { attempt } from "#/utils/attempt";
 import { env } from "#/utils/env";
@@ -40,6 +42,9 @@ const accusedNames = (trial: Trial) => formatNames(trial.accused.map((member) =>
 const defenseName = (trial: Trial) => trial.lawyer?.name ?? accusedNames(trial);
 
 const seconds = (trial: Trial) => String(Math.round((trial.phaseEndsAt - Date.now()) / 1000));
+
+/** Members of the trial the judge may know: the accused, the plaintiff, the lawyer and the witnesses */
+const partyIds = (trial: Trial) => [...trial.accused, trial.plaintiff, ...(trial.lawyer === null ? [] : [trial.lawyer]), ...trial.witnessesCalled].map((member) => member.id);
 
 /** Name of whoever speaks in a trial: the judge, the clerk, the AI lawyer, a party, or a member of the audience */
 const speakerOf = (trial: Trial, speakerId: string | null): Member => {
@@ -242,6 +247,8 @@ const onSpeech = async (trial: Trial, speakerId: string | null, line: string) =>
   // Only what members say out loud below: the judge, the clerk and the AI lawyer do not trigger anything.
   if (speakerId === null || speakerId === CLERK.id || speakerId === AI_LAWYER.id) return;
 
+  noteLine(speaker, line);
+
   if (OBJECTION_PATTERN.test(line) && sideOf(trial, speakerId) !== null) {
     if (court.object(trial.channelId, speaker) === "not-american") await announce(
       trial,
@@ -268,7 +275,7 @@ const onSpeech = async (trial: Trial, speakerId: string | null, line: string) =>
     lines: [],
     lastAt: Date.now(),
   });
-  await announce(trial, await judge.intervene(trial, heard.lines.join("\n")));
+  await announce(trial, await judge.intervene(trial, heard.lines.join("\n"), await knownAbout(partyIds(trial))));
 };
 
 const onVerdict = async (trial: Trial, verdict: Verdict) => {
@@ -277,7 +284,7 @@ const onVerdict = async (trial: Trial, verdict: Verdict) => {
 
   // The record is the durable outcome: saved before any Discord call that could fail.
   const stopSentenceTyping = startDiscordTyping(channel, () => logger.warn("Could not send the typing indicator"));
-  const sentence = verdict.guilty ? await judge.sentence(trial).finally(stopSentenceTyping) : null;
+  const sentence = verdict.guilty ? await sentenceTrial(trial).finally(stopSentenceTyping) : null;
   stopSentenceTyping();
   const transcript = await attempt(async () => fetchTranscript(trial.id));
 
@@ -294,7 +301,7 @@ const onVerdict = async (trial: Trial, verdict: Verdict) => {
   );
 
   const stopTyping = startDiscordTyping(channel, () => logger.warn("Could not send the typing indicator"));
-  const speech = await judge.verdict(trial, verdict, sentence).finally(stopTyping);
+  const speech = await judge.verdict(trial, verdict, sentence, await knownAbout(partyIds(trial))).finally(stopTyping);
 
   // The official verdict is always written; the judge's speech only without voice channel.
   await sendPanel(channel, verdictPanel(trial, verdict, sentence, isHeardOutLoud(trial) ? null : speech, await thumbnailOf(trial)));
@@ -314,7 +321,7 @@ const handleEvent = async (event: CourtEvent) => {
     const channel = await fetchDiscordSendableChannel(trial.channelId);
 
     const stopTyping = startDiscordTyping(channel, () => logger.warn("Could not send the typing indicator"));
-    const speech = await judge.opening(trial).finally(stopTyping);
+    const speech = await judge.opening(trial, await knownAbout(partyIds(trial))).finally(stopTyping);
     await sendPanel(channel, openingPanel(trial, isHeardOutLoud(trial) ? null : speech, await thumbnailOf(trial)));
     court.say(trial.channelId, null, speech);
     judgeSays(trial.channelId, speech);

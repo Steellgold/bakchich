@@ -145,6 +145,69 @@ const Rail = ({ box, textures }: {
 };
 
 /** Paneled rostrum; the judge's chair stays centered on the authoritative seat. */
+/** Folder colors on the archive shelves */
+const FOLDER_COLORS = ["#cf3934", "#f2bd3c", "#3fb5a8", "#9b55e0", "#e8812a", "#fff1c1"] as const;
+const SHELVES = 4;
+
+/** The archive cabinet: an open wooden cabinet, its shelves packed with the clerk's folders and paper stacks */
+const Cabinet = ({ box, textures }: {
+  box: Box;
+  textures: Textures;
+}) => {
+  const width = box.max.x - box.min.x;
+  const depth = box.max.z - box.min.z;
+  const shelfGap = (box.height - 0.3) / SHELVES;
+  // The open side faces the room (towards the judge, -z):
+  const front = -depth / 2;
+  return (
+    <group position={[(box.min.x + box.max.x) / 2, 0, (box.min.z + box.max.z) / 2]}>
+      <Part position={[0, box.height / 2, depth / 2 - 0.05]} size={[width, box.height, 0.1]} textures={textures} kind="stand" />
+      {[-1, 1].map((side) => (
+        <Part key={side} position={[side * (width / 2 - 0.06), box.height / 2, 0]} size={[0.12, box.height, depth]} textures={textures} kind="stand" />
+      ))}
+      <Part position={[0, box.height - 0.06, 0]} size={[width + 0.12, 0.12, depth + 0.08]} textures={textures} kind="desk" />
+      {Array.from({ length: SHELVES + 1 }, (_shelf, shelf) => (
+        <Part
+          key={`shelf-${String(shelf)}`}
+          position={[0, 0.08 + shelf * shelfGap, 0]}
+          size={[width - 0.12, 0.06, depth - 0.1]}
+          textures={textures}
+          kind="desk"
+          outline={shelf === 0}
+        />
+      ))}
+      {Array.from({ length: SHELVES }, (_shelf, shelf) => Array.from({ length: 11 }, (_folder, index) => {
+        // A stable jumble: folders of varied colors and heights, with a gap now and then.
+        const seed = (shelf * 7 + index * 13) % 17;
+
+        if (seed % 6 === 0) return null;
+
+        const height = shelfGap * (0.55 + (seed % 4) * 0.08);
+        return (
+          <Part
+            key={`folder-${String(shelf)}-${String(index)}`}
+            position={[-width / 2 + 0.25 + index * ((width - 0.5) / 10), 0.11 + shelf * shelfGap + height / 2, front + 0.3]}
+            size={[0.12, height, depth * 0.55]}
+            textures={textures}
+            color={FOLDER_COLORS[seed % FOLDER_COLORS.length]}
+            outline={false}
+          />
+        );
+      }))}
+      {[0.6, -0.5].map((x, index) => (
+        <Part
+          key={x}
+          position={[x, 0.11 + (index + 1) * shelfGap + 0.06, front + 0.3]}
+          size={[0.32, 0.1, 0.24]}
+          textures={textures}
+          color="#fff9ee"
+          outline={false}
+        />
+      ))}
+    </group>
+  );
+};
+
 const Stand = ({ box, textures }: {
   box: Box;
   textures: Textures;
@@ -281,6 +344,7 @@ export const Courtroom = () => {
         if (box.kind === "desk") return <Desk key={key} box={box} textures={textures} />;
         if (box.kind === "rail") return <Rail key={key} box={box} textures={textures} />;
         if (box.kind === "stand") return <Stand key={key} box={box} textures={textures} />;
+        if (box.kind === "cabinet") return <Cabinet key={key} box={box} textures={textures} />;
 
         return (
           <mesh key={key} position={[(box.min.x + box.max.x) / 2, box.height / 2, (box.min.z + box.max.z) / 2]} castShadow receiveShadow>

@@ -4,8 +4,9 @@ import type { NearbyInteraction } from "./player-controller";
 import type { Toast } from "@/features/courtroom/use-room-socket";
 import type { Floor, Mode, Phase, Style, VoteResult } from "@tribunal/bot/court/engine";
 import type { Challenge, GameView } from "@tribunal/bot/room/chaos";
-import type { ClientMessage, TrialView } from "@tribunal/bot/room/protocol";
+import type { ArchiveFile, ClientMessage, TrialView } from "@tribunal/bot/room/protocol";
 import type { PlayerState, Role } from "@tribunal/bot/room/world";
+import { ArchivesDialog } from "./archives-dialog";
 import { ChaosHud } from "./chaos/chaos-hud";
 import { Emblem, GameButton, GameDialog } from "@/components/game-ui";
 import { useEffect, useState } from "react";
@@ -88,163 +89,180 @@ type HudProps = {
   challenge: Challenge | null;
   onChallengeAnswered: () => void;
   game: GameView | null;
+  archives: ArchiveFile[] | null;
+  onCloseArchives: () => void;
   send: (message: ClientMessage) => void;
 };
 
 /** Overlay: the case and the verdict at the top, the role and controls bottom-left, the prompt and the vote bottom-centre */
-export const Hud = ({ trial, verdict, voteResult, interaction, role, seatId, target, toasts, challenge, onChallengeAnswered, game, send }: HudProps) => {
-  const [now, setNow] = useState(() => Date.now());
-  const [guilty, setGuilty] = useState<boolean | null>(null);
+export const Hud
+  = ({ trial, verdict, voteResult, interaction, role, seatId, target, toasts, challenge, onChallengeAnswered, game, archives, onCloseArchives, send }: HudProps) => {
+    const [now, setNow] = useState(() => Date.now());
+    const [guilty, setGuilty] = useState<boolean | null>(null);
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setNow(Date.now());
-    }, 500);
-    return () => {
-      clearInterval(timer);
+    useEffect(() => {
+      const timer = setInterval(() => {
+        setNow(Date.now());
+      }, 500);
+      return () => {
+        clearInterval(timer);
+      };
+    }, []);
+
+    let action: string | null = null;
+    if (seatId !== null) action = "Se lever";
+    else if (interaction === "become-juror") action = "Devenir juré";
+    else if (interaction === "open-archives") action = "Consulter les archives";
+    else if (interaction === "sit-on-bench" || interaction === "sit-down") action = "S’asseoir";
+
+    const vote = (choice: boolean) => {
+      setGuilty(choice);
+      send({
+        type: "vote",
+        guilty: choice,
+      });
     };
-  }, []);
+    const remaining = trial === null ? 0 : trial.endsAt - now;
+    // The highlighted choice is the last one the court accepted:
+    const accepted = voteResult === "ok" ? guilty : null;
+    const floor = trial === null ? null : floorName(trial, trial.floor);
+    const canMakeChaos = role === null && seatId?.startsWith("jury-") !== true;
 
-  let action: string | null = null;
-  if (seatId !== null) action = "Se lever";
-  else if (interaction === "become-juror") action = "Devenir juré";
-  else if (interaction === "sit-on-bench" || interaction === "sit-down") action = "S’asseoir";
-
-  const vote = (choice: boolean) => {
-    setGuilty(choice);
-    send({
-      type: "vote",
-      guilty: choice,
-    });
-  };
-  const remaining = trial === null ? 0 : trial.endsAt - now;
-  // The highlighted choice is the last one the court accepted:
-  const accepted = voteResult === "ok" ? guilty : null;
-  const floor = trial === null ? null : floorName(trial, trial.floor);
-  const canMakeChaos = role === null && seatId?.startsWith("jury-") !== true;
-
-  return (
-    <div className="hud">
-      <div className="hud-top">
-        <section className="plate panel case">
-          <div className="case-head">
-            <span className="plate badge">{trial === null ? "Audience suspendue" : PHASE_LABELS[trial.phase]}</span>
-            {trial !== null && <span className={`plate timer${remaining <= HURRY_MS ? " is-hurry" : ""}`}>{formatCountdown(remaining)}</span>}
-          </div>
-          {trial !== null && (
-            <>
-              <h2 className="case-title">{`Le peuple contre ${joinNames(trial.accused.map((member) => member.name))}`}</h2>
-              <p className="case-crime">{`« ${trial.crime} »`}</p>
-              <p className="case-floor">{`${STYLE_LABELS[trial.style]} · ${MODE_LABELS[trial.mode]}${floor === null ? "" : ` · La parole : ${floor}`}`}</p>
-              <ul className="case-people">
-                <li>
-                  <span className="case-label">Plaignant</span>
-                  {trial.plaintiff.name}
-                </li>
-                {trial.lawyer !== null && (
-                  <li>
-                    <span className="case-label">Avocat</span>
-                    {trial.lawyer.name}
-                  </li>
-                )}
-                {trial.witness !== null && (
-                  <li>
-                    <span className="case-label">À la barre</span>
-                    {trial.witness.name}
-                  </li>
-                )}
-              </ul>
-            </>
-          )}
-        </section>
-
-        {verdict !== null && (
-          <section key={verdict} className="plate verdict" role="status">
-            <Emblem />
-            <span className="plate badge">Verdict</span>
-            <p className="verdict-line">{verdict}</p>
-          </section>
-        )}
-      </div>
-
-      <div className="hud-bottom">
-        <div className="hud-corner">
-          <span className="plate role">
-            <span className="role-label">Vous</span>
-            {roleLabel(role, seatId)}
-          </span>
-          <ul className="hints">
-            <li className="hint">
-              <kbd>Z</kbd>
-              <kbd>Q</kbd>
-              <kbd>S</kbd>
-              <kbd>D</kbd>
-              Bouger
-            </li>
-            <li className="hint">
-              <kbd>Clic</kbd>
-              Caméra à la souris
-            </li>
-            <li className="hint">
-              <kbd>Échap</kbd>
-              Libérer le curseur
-            </li>
-            {canMakeChaos && (
+    return (
+      <div className="hud">
+        <div className="hud-top">
+          <section className="plate panel case">
+            <div className="case-head">
+              <span className="plate badge">{trial === null ? "Audience suspendue" : PHASE_LABELS[trial.phase]}</span>
+              {trial !== null && <span className={`plate timer${remaining <= HURRY_MS ? " is-hurry" : ""}`}>{formatCountdown(remaining)}</span>}
+            </div>
+            {trial !== null && (
               <>
-                <li className="hint">
-                  <kbd>O</kbd>
-                  Objection !
-                </li>
-                <li className="hint">
-                  <kbd>B</kbd>
-                  Dormir
-                </li>
+                <h2 className="case-title">{`Le peuple contre ${joinNames(trial.accused.map((member) => member.name))}`}</h2>
+                <p className="case-crime">{`« ${trial.crime} »`}</p>
+                <p className="case-floor">{`${STYLE_LABELS[trial.style]} · ${MODE_LABELS[trial.mode]}${floor === null ? "" : ` · La parole : ${floor}`}`}</p>
+                <ul className="case-people">
+                  <li>
+                    <span className="case-label">Plaignant</span>
+                    {trial.plaintiff.name}
+                  </li>
+                  {trial.lawyer !== null && (
+                    <li>
+                      <span className="case-label">Avocat</span>
+                      {trial.lawyer.name}
+                    </li>
+                  )}
+                  {trial.witness !== null && (
+                    <li>
+                      <span className="case-label">À la barre</span>
+                      {trial.witness.name}
+                    </li>
+                  )}
+                </ul>
               </>
             )}
-          </ul>
+          </section>
+
+          {verdict !== null && (
+            <section key={verdict} className="plate verdict" role="status">
+              <Emblem />
+              <span className="plate badge">Verdict</span>
+              <p className="verdict-line">{verdict}</p>
+            </section>
+          )}
         </div>
 
-        <div className="hud-center">
-          <ChaosHud
-            target={target}
-            canMakeChaos={canMakeChaos}
-            toasts={toasts}
-            challenge={challenge}
-            onChallengeAnswered={onChallengeAnswered}
-            game={game}
-            send={send}
-          />
-          {trial?.phase === "vote" && (
-            <GameDialog
-              size="compact"
-              title="À vous de juger !"
-              actions={(
+        <div className="hud-bottom">
+          <div className="hud-corner">
+            <span className="plate role">
+              <span className="role-label">Vous</span>
+              {roleLabel(role, seatId)}
+            </span>
+            <ul className="hints">
+              <li className="hint">
+                <kbd>Z</kbd>
+                <kbd>Q</kbd>
+                <kbd>S</kbd>
+                <kbd>D</kbd>
+                Bouger
+              </li>
+              <li className="hint">
+                <kbd>Maj</kbd>
+                Courir
+              </li>
+              <li className="hint">
+                <kbd>Espace</kbd>
+                Sauter
+              </li>
+              <li className="hint">
+                <kbd>Clic</kbd>
+                Caméra à la souris
+              </li>
+              <li className="hint">
+                <kbd>Échap</kbd>
+                Libérer le curseur
+              </li>
+              {canMakeChaos && (
                 <>
-                  <GameButton variant="danger" selected={accepted === true} onClick={() => vote(true)}>
-                    Coupable
-                  </GameButton>
-                  <GameButton variant="success" selected={accepted === false} onClick={() => vote(false)}>
-                    Non coupable
-                  </GameButton>
+                  <li className="hint">
+                    <kbd>O</kbd>
+                    Objection !
+                  </li>
+                  <li className="hint">
+                    <kbd>B</kbd>
+                    Dormir
+                  </li>
                 </>
               )}
-            >
-              {voteResult !== null && (
-                <p key={`${voteResult}-${String(guilty)}`} className={`plate notice ${voteResult === "ok" ? "notice-success" : "notice-error"}`} role="status">
-                  {VOTE_RESULTS[voteResult]}
-                </p>
-              )}
-            </GameDialog>
-          )}
+            </ul>
+          </div>
 
-          {action !== null && (
-            <p key={action} className="plate prompt">
-              <kbd>E</kbd>
-              {action}
-            </p>
-          )}
+          <div className="hud-center">
+            {archives !== null && <ArchivesDialog files={archives} onClose={onCloseArchives} />}
+            <ChaosHud
+              target={target}
+              canMakeChaos={canMakeChaos}
+              toasts={toasts}
+              challenge={challenge}
+              onChallengeAnswered={onChallengeAnswered}
+              game={game}
+              send={send}
+            />
+            {trial?.phase === "vote" && (
+              <GameDialog
+                size="compact"
+                title="À vous de juger !"
+                actions={(
+                  <>
+                    <GameButton variant="danger" selected={accepted === true} onClick={() => vote(true)}>
+                      Coupable
+                    </GameButton>
+                    <GameButton variant="success" selected={accepted === false} onClick={() => vote(false)}>
+                      Non coupable
+                    </GameButton>
+                  </>
+                )}
+              >
+                {voteResult !== null && (
+                  <p
+                    key={`${voteResult}-${String(guilty)}`}
+                    className={`plate notice ${voteResult === "ok" ? "notice-success" : "notice-error"}`}
+                    role="status"
+                  >
+                    {VOTE_RESULTS[voteResult]}
+                  </p>
+                )}
+              </GameDialog>
+            )}
+
+            {action !== null && (
+              <p key={action} className="plate prompt">
+                <kbd>E</kbd>
+                {action}
+              </p>
+            )}
+          </div>
         </div>
       </div>
-    </div>
-  );
-};
+    );
+  };

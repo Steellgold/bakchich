@@ -6,10 +6,10 @@ import { AI_LAWYER, MAX_CRIME_LENGTH, normalizeCrime } from "#/features/court/en
 import { upsertMember } from "#/features/court/members";
 import { requestHearing } from "#/features/hearings/hearing-request";
 import { endPreparation, forceStartAnswers, forceStartHearing, isInHearingVoice, juryAnswers, pendingHearing, readyAnswers, requestJury, setPendingLawyer, voiceChannelOf } from "#/features/hearings/hearings";
-import { AGENTS_CATEGORY_IDS, COLOR, conversation, discordClient, embedOf, getCategoryId, registerMessageCommand } from "#/integrations/discord";
+import { AGENTS_CATEGORY_IDS, COLOR, conversation, discordClient, embedOf, getCategoryId, registerGuildCommand } from "#/integrations/discord";
 import { attempt } from "#/utils/attempt";
 import { trigger } from "#/utils/trigger";
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, LabelBuilder, MessageFlags, ModalBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle } from "discord.js";
+import { ActionRowBuilder, ApplicationCommandType, ButtonBuilder, ButtonStyle, LabelBuilder, MessageFlags, ModalBuilder, StringSelectMenuBuilder, TextInputBuilder, TextInputStyle } from "discord.js";
 
 const TRIAL_OVER = `Ce procès est terminé.`;
 const NO_HEARING = `Aucune audience n'attend dans ce salon.`;
@@ -201,7 +201,10 @@ const submitOpenTrial = async (interaction: ModalSubmitInteraction, messageId: s
 // Registered at startup in each allowed guild (an exception confirmed by the server owners, see AGENTS.md):
 discordClient.once(
   "clientReady",
-  trigger.safeListener("Open-trial command registration", async () => registerMessageCommand(OPEN_TRIAL_COMMAND)),
+  trigger.safeListener("Open-trial command registration", async () => registerGuildCommand({
+    name: OPEN_TRIAL_COMMAND,
+    type: ApplicationCommandType.Message,
+  })),
 );
 
 trigger.discordEvent("interactionCreate", async (interaction) => {

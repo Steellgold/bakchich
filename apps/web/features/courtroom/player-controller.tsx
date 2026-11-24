@@ -7,7 +7,7 @@ import { Character } from "./character/character";
 import { isBenchSeat } from "./seats";
 import { useFrame, useThree } from "@react-three/fiber";
 import { CHAOS_REACH } from "@tribunal/bot/room/chaos";
-import { GATE, GATE_RADIUS, MAX_SPEED, ROOM, TICK_MS } from "@tribunal/bot/room/layout";
+import { ARCHIVES, ARCHIVES_RADIUS, GATE, GATE_RADIUS, MAX_SPEED, ROOM, RUN_SPEED, TICK_MS } from "@tribunal/bot/room/layout";
 import { accessFor, nearbyBenchSeat, SEAT_REACH, seatForRole, slide } from "@tribunal/bot/room/world";
 import { useEffect, useRef } from "react";
 
@@ -24,9 +24,10 @@ const KEYS = {
   backward: ["KeyS"],
   left: ["KeyA"],
   right: ["KeyD"],
+  run: ["ShiftLeft", "ShiftRight"],
 };
 
-export type NearbyInteraction = "become-juror" | "sit-on-bench" | "sit-down" | null;
+export type NearbyInteraction = "become-juror" | "sit-on-bench" | "sit-down" | "open-archives" | null;
 
 /** Chaos keys of the audience: on the member you look at, or on yourself */
 const TARGET_KEYS: Record<string, (targetId: string) => ClientMessage> = {
@@ -72,6 +73,7 @@ type PlayerControllerProps = {
   others: PlayerState[];
   onTarget: (target: PlayerState | null) => void;
   level: number;
+  jumpAt: number;
   sleeping: boolean;
   splat: boolean;
   fighting: boolean;
@@ -79,7 +81,7 @@ type PlayerControllerProps = {
 
 /** The local player: keyboard movement with prediction, third-person camera and the E interaction */
 export const PlayerController
-  = ({ self, trial, speech, speaking, send, occupiedSeats, onInteraction, others, onTarget, level, sleeping, splat, fighting }: PlayerControllerProps) => {
+  = ({ self, trial, speech, speaking, send, occupiedSeats, onInteraction, others, onTarget, level, jumpAt, sleeping, splat, fighting }: PlayerControllerProps) => {
     const camera = useThree((state) => state.camera);
     const canvas = useThree((state) => state.gl.domElement);
     const pressedRef = useRef(new Set<string>());
@@ -111,6 +113,13 @@ export const PlayerController
         pressedRef.current.add(event.code);
 
         if (event.repeat) return;
+
+        // Space jumps (it would scroll the page otherwise):
+        if (event.code === "Space") {
+          event.preventDefault();
+          send({ type: "jump" });
+          return;
+        }
 
         const selfAction = SELF_KEYS[event.code];
         const targetAction = TARGET_KEYS[event.code];
@@ -155,10 +164,11 @@ export const PlayerController
       const isDown = (codes: string[]) => codes.some((code) => pressedRef.current.has(code));
       const forward = Number(isDown(KEYS.forward)) - Number(isDown(KEYS.backward));
       const strafe = Number(isDown(KEYS.right)) - Number(isDown(KEYS.left));
+      const running = isDown(KEYS.run);
 
       if (self.seatId === null && (forward !== 0 || strafe !== 0)) {
         const length = Math.hypot(forward, strafe);
-        const step = (MAX_SPEED * delta) / length;
+        const step = ((running ? RUN_SPEED : MAX_SPEED) * delta) / length;
         // The camera looks towards -yaw: forward moves away from it.
         const dx = (-Math.sin(yawRef.current) * forward + Math.cos(yawRef.current) * strafe) * step;
         const dz = (-Math.cos(yawRef.current) * forward - Math.sin(yawRef.current) * strafe) * step;
@@ -180,6 +190,7 @@ export const PlayerController
           x: predictedRef.current.x,
           z: predictedRef.current.z,
           rotation: facingRef.current,
+          running,
         });
       }
 
@@ -190,7 +201,8 @@ export const PlayerController
         const nearGate = Math.hypot(position.x - GATE.x, position.z - GATE.z) <= GATE_RADIUS;
         const ownSeat = self.role === null ? undefined : seatForRole(self.role, trial, self.id);
         const nearOwnSeat = ownSeat !== undefined && Math.hypot(position.x - ownSeat.position.x, position.z - ownSeat.position.z) <= SEAT_REACH;
-        if (nearGate && self.role === null) interaction = "become-juror";
+        if (Math.hypot(position.x - ARCHIVES.x, position.z - ARCHIVES.z) <= ARCHIVES_RADIUS) interaction = "open-archives";
+        else if (nearGate && self.role === null) interaction = "become-juror";
         else if (nearOwnSeat) interaction = "sit-down";
         else if (nearbyBenchSeat(self.position, occupiedSeats) !== undefined) interaction = "sit-on-bench";
       }
@@ -241,6 +253,7 @@ export const PlayerController
         speech={speech}
         speaking={speaking}
         level={level}
+        jumpAt={jumpAt}
         sleeping={sleeping}
         splat={splat}
         fighting={fighting}

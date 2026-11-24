@@ -94,7 +94,8 @@ export const RoomClient = ({ url, token }: {
   url: string;
   token?: string;
 }) => {
-  const { selfId, snapshot, speeches, verdict, voteResult, rejected, toasts, tomatoes, challenge, setChallenge, game, send } = useRoomSocket(url, token);
+  const { selfId, snapshot, speeches, verdict, voteResult, rejected, toasts, tomatoes, jumps, archives, setArchives, challenge, setChallenge, game, send }
+    = useRoomSocket(url, token);
   const [interaction, setInteraction] = useState<NearbyInteraction>(null);
   const [target, setTarget] = useState<PlayerState | null>(null);
   const [leaving, setLeaving] = useState<LeavingPlayer[]>([]);
@@ -213,6 +214,7 @@ export const RoomClient = ({ url, token }: {
               speech={latestSpeech(speeches, player.id)}
               speaking={speaking.has(player.id)}
               level={levelOf(player.id)}
+              jumpAt={jumps[player.id]}
               sleeping={sleeping.has(player.id)}
               splat={splats.has(player.id)}
               fighting={fighting.has(player.id)}
@@ -231,6 +233,7 @@ export const RoomClient = ({ url, token }: {
             speech={latestSpeech(speeches, self.id)}
             speaking={speaking.has(self.id)}
             level={levelOf(self.id)}
+            jumpAt={jumps[self.id] ?? 0}
             sleeping={sleeping.has(self.id)}
             splat={splats.has(self.id)}
             fighting={fighting.has(self.id)}
@@ -255,6 +258,8 @@ export const RoomClient = ({ url, token }: {
         challenge={challenge}
         onChallengeAnswered={() => setChallenge(null)}
         game={game}
+        archives={archives}
+        onCloseArchives={() => setArchives(null)}
         send={send}
       />
     </div>

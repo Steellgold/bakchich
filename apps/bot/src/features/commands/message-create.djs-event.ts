@@ -9,6 +9,7 @@ import { upsertMember } from "#/features/court/members";
 import { fetchRecord } from "#/features/court/record";
 import { requestHearing } from "#/features/hearings/hearing-request";
 import { collectContext, forceStartAnswers, forceStartHearing } from "#/features/hearings/hearings";
+import { knownAbout } from "#/features/profiles/profiles";
 import { AGENTS_CATEGORY_IDS, COLOR, conversation, discordClient, embedOf, findDiscordGuildMember, getCategoryId, sanitizeDiscordMessage, startDiscordTyping } from "#/integrations/discord";
 import { logger } from "#/utils/logger";
 import { trigger } from "#/utils/trigger";
@@ -166,7 +167,7 @@ const showRecord = async (message: Message<true>, targetId: string) => {
     fetchRecord(targetId),
     fetchDossier(targetId),
   ]);
-  await talk(message, await judge.record(target?.displayName ?? "Cet individu", entries, formatDossier(dossier)));
+  await talk(message, await judge.record(target?.displayName ?? "Cet individu", entries, formatDossier(dossier), await knownAbout([targetId])));
 };
 
 /** The clerk recalls the hearing in progress, from what he typed: in the channel and as a bubble in the courtroom */
@@ -259,7 +260,7 @@ const answerMention = async (message: Message<true>, botId: string, command: Ret
     return;
   }
 
-  await talk(message, await judge.chat(authorName(message), content));
+  await talk(message, await judge.chat(authorName(message), content, await knownAbout([message.author.id, ...message.mentions.users.keys()])));
 };
 
 trigger.discordEvent("messageCreate", async (message) => {

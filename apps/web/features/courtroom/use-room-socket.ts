@@ -2,7 +2,7 @@
 
 import type { VoteResult } from "@tribunal/bot/court/engine";
 import type { Challenge, GameView } from "@tribunal/bot/room/chaos";
-import type { ClientMessage, ServerMessage } from "@tribunal/bot/room/protocol";
+import type { ArchiveFile, ClientMessage, ServerMessage } from "@tribunal/bot/room/protocol";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const SPEECH_DURATION_MS = 6_000;
@@ -41,6 +41,9 @@ export const useRoomSocket = (url: string, token?: string) => {
   const [rejected, setRejected] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [tomatoes, setTomatoes] = useState<TomatoFlight[]>([]);
+  /** When each member last jumped (client clock) */
+  const [archives, setArchives] = useState<ArchiveFile[] | null>(null);
+  const [jumps, setJumps] = useState<Record<string, number>>({});
   const [challenge, setChallenge] = useState<Challenge | null>(null);
   const [game, setGame] = useState<GameView | null>(null);
 
@@ -96,6 +99,10 @@ export const useRoomSocket = (url: string, token?: string) => {
             at,
           },
         ]);
+        else if (message.kind === "jump") setJumps((current) => ({
+          ...current,
+          [message.fromId]: at,
+        }));
         else setSpeeches((current) => [
           ...current,
           {
@@ -106,6 +113,7 @@ export const useRoomSocket = (url: string, token?: string) => {
         ]);
       }
 
+      if (message.type === "archives") setArchives(message.files);
       if (message.type === "rumor") setToasts((current) => [
         ...current,
         {
@@ -152,5 +160,5 @@ export const useRoomSocket = (url: string, token?: string) => {
     if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
   }, []);
 
-  return { selfId, snapshot, speeches, verdict, voteResult, rejected, toasts, tomatoes, challenge, setChallenge, game, send };
+  return { selfId, snapshot, speeches, verdict, voteResult, rejected, toasts, tomatoes, jumps, archives, setArchives, challenge, setChallenge, game, send };
 };

@@ -399,3 +399,42 @@
     width: 96px;
   }
 }
+
+/* ---------- Archive cabinet ---------- */
+
+.archives {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: min(52vh, 420px);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.archive {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  padding: var(--space-2);
+  background: rgb(28 8 50 / 0.45);
+  clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 6px, 100% calc(100% - 6px), calc(100% - 6px) 100%, 6px 100%, 0 calc(100% - 6px), 0 6px);
+}
+
+.archive-avatar {
+  flex: none;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--gold-500);
+}
+
+.archive-name {
+  margin: 0;
+  font: 400 var(--text-md) / 1.1 var(--font-heading);
+}
+
+.archive-notes {
+  margin: 2px 0 0;
+  font-size: var(--text-xs);
+  line-height: 1.35;
+}

@@ -1,5 +1,14 @@
 // Arm gestures while talking and the motion constants of the characters.
 
+const JUMP_MS = 600;
+const JUMP_HEIGHT = 0.7;
+
+/** Height of a jump started at `jumpAt` (Date.now()), a simple arc, 0 when it is over */
+export const jumpHeight = (jumpAt: number): number => {
+  const progress = (Date.now() - jumpAt) / JUMP_MS;
+  return progress > 0 && progress < 1 ? Math.sin(progress * Math.PI) * JUMP_HEIGHT : 0;
+};
+
 export type ArmPose = {
   x: number;
   outward: number;

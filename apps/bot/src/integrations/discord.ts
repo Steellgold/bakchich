@@ -1,7 +1,7 @@
-import type { Channel, ContainerBuilder, Guild, GuildMember, Message, MessageCreateOptions, SendableChannels } from "discord.js";
+import type { ApplicationCommandDataResolvable, Channel, ContainerBuilder, Guild, GuildMember, Message, MessageCreateOptions, SendableChannels } from "discord.js";
 import { env } from "#/utils/env";
 import { logger } from "#/utils/logger";
-import { ActivityType, ApplicationCommandType, ChannelType, Client, DiscordAPIError, EmbedBuilder, GatewayIntentBits, GuildScheduledEventEntityType, GuildScheduledEventPrivacyLevel, GuildScheduledEventStatus, MessageFlags, Partials, RESTJSONErrorCodes } from "discord.js";
+import { ActivityType, ChannelType, Client, DiscordAPIError, EmbedBuilder, GatewayIntentBits, GuildScheduledEventEntityType, GuildScheduledEventPrivacyLevel, GuildScheduledEventStatus, MessageFlags, Partials, RESTJSONErrorCodes } from "discord.js";
 
 export const DISCORD_MAX_MESSAGE_LENGTH = 2000;
 
@@ -39,6 +39,15 @@ export const getCategoryId = (channel: Channel): string | null => {
   if (channel.isThread()) return channel.parent?.parentId ?? null;
 
   return channel.parentId;
+};
+
+/** The channel of a guild message, its parent (for a thread) and its category: a setting on any of them applies */
+export const channelChain = (message: Message<true>): (string | null)[] => {
+  const { channel } = message;
+
+  if (channel.isThread()) return [channel.id, channel.parentId, channel.parent?.parentId ?? null];
+
+  return [channel.id, channel.parentId];
 };
 
 /** Guild member, or null when the user is not (or no longer) in the guild */
@@ -226,17 +235,16 @@ export const createPreparationRoom = async (guild: Guild, input: {
 };
 
 /** Register a message command (right click on a message, Applications) in each allowed guild; creating it again with the same name updates it. Best effort, logged. */
-export const registerMessageCommand = async (name: string): Promise<void> => {
+export const registerGuildCommand = async (command: ApplicationCommandDataResolvable & {
+  name: string;
+}): Promise<void> => {
   for (const guildId of GUILD_IDS) {
     try {
       const guild = await discordClient.guilds.fetch(guildId);
-      await guild.commands.create({
-        name,
-        type: ApplicationCommandType.Message,
-      });
+      await guild.commands.create(command);
     }
     catch (error) {
-      logger.warn(`Could not register the "${name}" command in guild ${guildId}: ${error instanceof Error ? error.message : String(error)}`);
+      logger.warn(`Could not register the "${command.name}" command in guild ${guildId}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 };

@@ -3,11 +3,12 @@
 import type { Vec2 } from "@tribunal/bot/room/layout";
 import type { Group, Mesh } from "three";
 import { INK } from "../courtroom";
-import { EIGHTH, EXTRAPOLATE_SECONDS, FOLLOW_RATE, FRONT, GESTURE_SECONDS, gesturePacks, IDLE, STALE_SECONDS, STRIDE_PER_METER, TURN_RATE } from "./gestures";
+import { EIGHTH, EXTRAPOLATE_SECONDS, FOLLOW_RATE, FRONT, GESTURE_SECONDS, gesturePacks, IDLE, jumpHeight, STALE_SECONDS, STRIDE_PER_METER, TURN_RATE } from "./gestures";
 import { CLERK_LOOK, JUDGE_LOOK, memberLook, POLICE_LOOK } from "./looks";
 import { facetGeometry, Flat, Head, Toon, useAvatarTexture } from "./parts";
 import { Html } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
+import { MAX_SPEED } from "@tribunal/bot/room/layout";
 import { useMemo, useRef } from "react";
 
 type CharacterProps = {
@@ -35,6 +36,8 @@ type CharacterProps = {
   splat?: boolean;
   /** Throwing punches until the police comes */
   fighting?: boolean;
+  /** When the member last jumped (Date.now()), the hop lasts JUMP_MS */
+  jumpAt?: number;
   /** The clerk typing on his keyboard */
   typing?: boolean;
   /** Smoothly follow the given position (remote players) instead of jumping to it */
@@ -47,7 +50,7 @@ type CharacterProps = {
 
 /** Low-poly member with a stable look: build, outfit, face and hair all come from their ID. */
 export const Character
-  = ({ id, name, avatarUrl, position, rotation, seated, onBench = false, speech, elevation = 0, wig = false, speaking = false, level = 0, variant = "member", sleeping = false, splat = false, fighting = false, typing = false, interpolate = false, follow }: CharacterProps) => {
+  = ({ id, name, avatarUrl, position, rotation, seated, onBench = false, speech, elevation = 0, wig = false, speaking = false, level = 0, variant = "member", sleeping = false, splat = false, fighting = false, jumpAt = 0, typing = false, interpolate = false, follow }: CharacterProps) => {
     const groupRef = useRef<Group>(null);
     const leftArmRef = useRef<Group>(null);
     const rightArmRef = useRef<Group>(null);
@@ -70,6 +73,7 @@ export const Character
       changedAt: 0,
       phase: 0,
       walk: 0,
+      run: 0,
       talk: 0,
       wasSpeaking: false,
       loud: 0,
@@ -140,14 +144,22 @@ export const Character
       current.rotation.y += turn * (1 - Math.exp(-delta * TURN_RATE));
 
       // Walking cycle from the distance actually covered: legs swing, arms swing the other way, the body bobs.
+      // Faster than a walk, it becomes a run: longer strides, higher bounce, the body leaning forward.
       const moved = Math.hypot(current.position.x - beforeX, current.position.z - beforeZ);
-      const walking = !seated && moved / Math.max(delta, 0.001) > 0.4;
+      const speed = moved / Math.max(delta, 0.001);
+      const walking = !seated && speed > 0.4;
       motion.phase += moved * STRIDE_PER_METER;
       motion.walk += ((walking ? 1 : 0) - motion.walk) * (1 - Math.exp(-delta * 10));
-      current.position.y = baseY + Math.abs(Math.sin(motion.phase)) * 0.045 * motion.walk + (fighting ? Math.abs(Math.sin(time * 9)) * 0.06 : 0);
+      motion.run += ((walking && speed > MAX_SPEED + 0.5 ? 1 : 0) - motion.run) * (1 - Math.exp(-delta * 8));
+      current.position.y
+        = baseY
+          + Math.abs(Math.sin(motion.phase)) * (0.045 + motion.run * 0.07) * motion.walk
+          + (fighting ? Math.abs(Math.sin(time * 9)) * 0.06 : 0)
+          + jumpHeight(jumpAt);
+      current.rotation.x = motion.run * 0.18;
 
       for (const [index, leg] of [leftLegRef.current, rightLegRef.current].entries()) {
-        if (leg !== null) leg.rotation.x = Math.sin(motion.phase + index * Math.PI) * 0.75 * motion.walk;
+        if (leg !== null) leg.rotation.x = Math.sin(motion.phase + index * Math.PI) * (0.75 + motion.run * 0.35) * motion.walk;
       }
 
       // Talking: a syllable-like rhythm drives the mouth, head, brows and hands; the loudness of the voice (when known) widens and speeds them up.
@@ -199,7 +211,7 @@ export const Character
         const idle = typing ? { ...IDLE, x: -1.15 } : { ...IDLE, x: restX };
         const pose = gesture === undefined ? idle : index === 0 ? gesture.left : gesture.right;
         const wobble = (pose.wobble ?? 0) * intensity;
-        const swing = gesture === undefined ? Math.sin(motion.phase + (index === 0 ? Math.PI : 0)) * 0.6 * motion.walk : 0;
+        const swing = gesture === undefined ? Math.sin(motion.phase + (index === 0 ? Math.PI : 0)) * (0.6 + motion.run * 0.5) * motion.walk : 0;
         // Raised arms beat with the syllables, harder when the voice is loud:
         const beat = pose.x < -0.3 ? syllable * 0.18 * talk * intensity : 0;
         const raise = gesture === undefined ? pose.x : pose.x * intensity;

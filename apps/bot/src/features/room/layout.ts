@@ -10,7 +10,7 @@ export type Box = {
   min: Vec2;
   max: Vec2;
   height: number;
-  kind: "wall" | "bench" | "desk" | "rail" | "stand";
+  kind: "wall" | "bench" | "desk" | "rail" | "stand" | "cabinet";
 };
 export type Seat = {
   id: string;
@@ -22,6 +22,8 @@ export type Seat = {
 export const JUDGE_NAME = "Juge Bakchich";
 
 export const MAX_SPEED = 4;
+/** Holding Shift */
+export const RUN_SPEED = 7;
 export const GATE_RADIUS = 1.5;
 export const TICK_MS = 100;
 /** Collision radius of a character */
@@ -68,6 +70,13 @@ export const GATE: Vec2 = {
   x: 0,
   z: RAIL_Z + 0.6,
 };
+
+/** The archive cabinet in the back-left corner, full of the clerk's files, and where to stand to read them */
+export const ARCHIVES: Vec2 = {
+  x: -8.6,
+  z: 28.4,
+};
+export const ARCHIVES_RADIUS = 1.4;
 
 /** Side door on the right wall, decorative until phase 4 */
 export const SIDE_DOOR: Vec2 = {
@@ -116,6 +125,8 @@ export const OBSTACLES: Box[] = [
   // Balustrade with the gate gap in the middle:
   box(-HALF_WIDTH, RAIL_Z, -1, RAIL_Z + 0.3, 1, "rail"),
   box(1, RAIL_Z, HALF_WIDTH, RAIL_Z + 0.3, 1, "rail"),
+  // Archive cabinet against the back wall:
+  box(-9.8, 29.2, -7.4, DEPTH, 2.4, "cabinet"),
   // Public benches:
   ...BENCH_ROWS.flatMap((z) => BENCH_SIDES.map(([minX, maxX]) => box(minX, z, maxX, z + BENCH_DEPTH, 0.5, "bench"))),
 ];
