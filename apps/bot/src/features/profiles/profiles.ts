@@ -3,7 +3,7 @@ import { tableMember } from "#/tables/member";
 import { logger } from "#/utils/logger";
 import { postgres } from "#/utils/postgres";
 import { trigger } from "#/utils/trigger";
-import { desc, inArray, isNotNull, sql } from "drizzle-orm";
+import { desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 
 /** A member's file is rewritten once this many new lines were heard or read */
 const LINES_PER_UPDATE = 25;
@@ -25,6 +25,45 @@ const buffers = new Map<
   }
 >();
 const recentUpdates: number[] = [];
+/** Members who asked to be forgotten: checked on every message, so they live in memory */
+const forgotten = new Set<string>();
+
+export const loadForgotten = async (): Promise<void> => {
+  const rows = await postgres.select({ id: tableMember.id }).from(tableMember).where(eq(tableMember.forgotten, true));
+  forgotten.clear();
+
+  for (const row of rows) forgotten.add(row.id);
+};
+
+/** « Oublie-moi »: the notes are erased and no new ones are taken; the court record stays, it is the game */
+export const forgetMember = async (member: {
+  id: string;
+  name: string;
+}): Promise<void> => {
+  forgotten.add(member.id);
+  buffers.delete(member.id);
+  await postgres
+    .insert(tableMember)
+    .values({
+      ...member,
+      avatarUrl: null,
+      forgotten: true,
+    })
+    .onConflictDoUpdate({
+      target: tableMember.id,
+      set: {
+        profile: null,
+        profiledAt: null,
+        forgotten: true,
+      },
+    });
+};
+
+/** The member allows the judge to take notes on them again */
+export const rememberMember = async (memberId: string): Promise<void> => {
+  forgotten.delete(memberId);
+  await postgres.update(tableMember).set({ forgotten: false }).where(eq(tableMember.id, memberId));
+};
 
 const canUpdate = (updatedAt: number, now: number) => {
   while (recentUpdates.length > 0 && (recentUpdates[0] ?? now) < now - HOUR_MS) recentUpdates.shift();
@@ -50,7 +89,8 @@ const updateProfile = trigger.safeListener("Profile update", async (memberId: st
 
   const profile = await judge.profile(buffer.name, row?.profile ?? "", lines);
 
-  if (profile === "") return;
+  // The member may have asked to be forgotten while the clerk was writing:
+  if (profile === "" || forgotten.has(memberId)) return;
 
   await postgres
     .insert(tableMember)
@@ -79,7 +119,7 @@ export const noteLine = (member: {
 }, text: string): void => {
   const line = text.replace(/\s+/gu, " ").trim().slice(0, MAX_LINE_LENGTH);
 
-  if (line === "") return;
+  if (line === "" || forgotten.has(member.id)) return;
 
   const buffer = buffers.get(member.id) ?? {
     name: member.name,
@@ -113,6 +153,7 @@ export type MemberFile = {
   avatarUrl: string | null;
   profile: string | null;
   profiledAt: Date | null;
+  forgotten: boolean;
 };
 
 /** The file of one member, null when the bot has never seen them */

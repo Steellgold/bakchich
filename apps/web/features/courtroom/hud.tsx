@@ -8,6 +8,7 @@ import type { ArchiveFile, ClientMessage, TrialView } from "@tribunal/bot/room/p
 import type { PlayerState, Role } from "@tribunal/bot/room/world";
 import { ArchivesDialog } from "./archives-dialog";
 import { ChaosHud } from "./chaos/chaos-hud";
+import { EmojiText } from "./emoji-text";
 import { Emblem, GameButton, GameDialog } from "@/components/game-ui";
 import { useEffect, useState } from "react";
 
@@ -167,7 +168,7 @@ export const Hud
             <section key={verdict} className="plate verdict" role="status">
               <Emblem />
               <span className="plate badge">Verdict</span>
-              <p className="verdict-line">{verdict}</p>
+              <p className="verdict-line"><EmojiText>{verdict}</EmojiText></p>
             </section>
           )}
         </div>

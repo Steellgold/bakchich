@@ -4,6 +4,7 @@ import type { Toast } from "@/features/courtroom/use-room-socket";
 import type { Challenge, GameView, RpsPick } from "@tribunal/bot/room/chaos";
 import type { ClientMessage } from "@tribunal/bot/room/protocol";
 import type { PlayerState } from "@tribunal/bot/room/world";
+import { EmojiText } from "../emoji-text";
 import { GameButton, GameDialog } from "@/components/game-ui";
 import { CONNECT4_COLUMNS, CONNECT4_ROWS } from "@tribunal/bot/room/chaos";
 
@@ -153,7 +154,7 @@ export const ChaosHud = ({ target, canMakeChaos, toasts, challenge, onChallengeA
         <ul className="chaos-toasts" aria-live="polite">
           {toasts.map((toast) => (
             <li key={toast.at} className="plate notice">
-              {toast.text}
+              <EmojiText>{toast.text}</EmojiText>
             </li>
           ))}
         </ul>

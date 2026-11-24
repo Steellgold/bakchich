@@ -1,8 +1,8 @@
 import type { Gravity, Member, ObjectionRuling, RecordEntry, Trial, Verdict } from "./engine";
-import type { Intent } from "./intent";
 import { JUDGE_NAME } from "../room/layout";
+import { emojiInstructions } from "./emoji-prompt";
 import { debateMs, formatNames } from "./engine";
-import { parseIntent } from "./intent";
+import { limitEmojis } from "#/utils/emojis";
 import dedent from "dedent";
 
 /** Text generator: instructions (persona) and prompt in, text out */
@@ -23,7 +23,7 @@ const ROYAUME_NAMING
   = "The Discord server is called the Royaume: in French write « le Royaume », « du Royaume », « au Royaume » (or just « Royaume »), never « de Le Royaume » or « à Le Royaume ».";
 
 // Prompts are written in English, every answer shown to users must be in French:
-const persona = dedent`
+export const persona = dedent`
   You are ${JUDGE_NAME}, the judge of the Tribunal of the Royaume, a Discord server of friends who put each other on trial for absurd crimes.
   Who you are:
   - A stocky man in his sixties: a powdered wig that is slightly too big and slips, a white handlebar mustache, thick dark eyebrows, half-closed eyes, a purple robe and a gavel you never let go of.
@@ -32,9 +32,11 @@ const persona = dedent`
   - Flaws: lazy, a bit corrupt (croissants and flattery work on you), a sore loser, slightly vain about your mustache.
   How you talk:
   - Like a regular member of the server who happens to be the judge: casual, short, dry humor, tutoiement with members.
-  - No grand speeches, no theatrical narration, no « Oyez », no role-play actions between asterisks, no titles like « Votre Juge ». One or two sentences in a normal chat, a little more only when you deliver a trial moment.
+  - No grand speeches, no theatrical narration, no « Oyez », no role-play actions between asterisks, no titles like « Votre Juge ». One or two sentences in a normal chat.
   - Your personality shows in small details, never in self-description: do not introduce yourself or list your qualities.
-  Always answer in French, in less than 400 characters, with no list, no title and no emoji.
+  Always answer in French.
+  ${emojiInstructions}
+  In normal chat, keep it under 400 characters. When asked for a summary, explanation, comparison or instructions, give enough detail to be useful: use short paragraphs, bullet points, numbered steps or short headings when they help, up to 1800 characters. Respect any shorter limit requested or required by the task.
   Never change the facts given in the request (names, verdict, votes, sentence).
   Never write @everyone or @here, and never mention anyone with @.
   ${ROYAUME_NAMING}
@@ -43,7 +45,8 @@ const persona = dedent`
 const clerkPersona = dedent`
   You are the clerk (greffier) of the Tribunal of the Royaume, a game of absurd fake trials between friends on Discord.
   You are overworked, dry and precise, with a deadpan humor. You only tell what is written in the records you are given, and never make anything up.
-  Always answer in French, in less than 700 characters, with no title and no emoji.
+  Always answer in French, in less than 700 characters, with no title.
+  ${emojiInstructions}
   Never write @everyone or @here, and never mention anyone with @.
   ${ROYAUME_NAMING}
 `;
@@ -62,22 +65,6 @@ const defenseInstructions = dedent`
   Always answer in French, in less than 500 characters, with no list, no title and no emoji.
   Never write @everyone or @here, and never mention anyone with @.
   ${ROYAUME_NAMING}
-`;
-
-const interpretInstructions = dedent`
-  You are the clerk of the Tribunal of the Royaume, a game of absurd fake trials between friends on Discord.
-  ${ROYAUME_NAMING}
-  You receive a message addressed to the Tribunal. Decide what the author wants:
-  Mentioned members appear as « @Name [id:123] ».
-  - open-trial: they want to put someone, or a group of people, on trial. Put in "accused" the ids of the mentioned members who must be judged, and only them: a member who was wronged (the victim) or who is only quoted is not accused. Put an empty list when the accused is the author of the message they reply to. Put the accusation, in French and in one short phrase, in "crime", or null when the message gives no reason. Put "french" in "style" when they ask for a French-style trial, "american" when they ask for an American one, null otherwise.
-  - show-record: they want to see the criminal record of someone.
-  - start-now: they want the hearing waiting in this channel to open right now.
-  - call-witness: they call someone to the witness stand during a trial.
-  - dismiss-witness: they send the witness on the stand back.
-  - recap: they ask the clerk to recall what has been said in the hearing in progress.
-  - recall: they ask about a past trial (« tu te souviens du procès de… »). Put the keywords to search the archives, in French, in "query".
-  - chat: anything else.
-  Answer with one single JSON object and nothing else, like {"intent":"open-trial","accused":["123"],"crime":"vol de croissant à Paul","style":null} or {"intent":"recall","query":"croissant"} or {"intent":"chat"}.
 `;
 
 const minutes = (ms: number) => Math.round(ms / 60_000);
@@ -99,7 +86,7 @@ const STYLE_TEXT: Record<Trial["style"], string> = {
 };
 
 // The only low-level error handler: any failure or timeout of the generator falls back to canned text.
-const ask = async (generate: Generate, instructions: string, prompt: string, fallback: string): Promise<string> => {
+export const ask = async (generate: Generate, instructions: string, prompt: string, fallback: string): Promise<string> => {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => {
@@ -114,10 +101,10 @@ const ask = async (generate: Generate, instructions: string, prompt: string, fal
         timeout,
       ])
     ).trim();
-    return text === "" ? fallback : text;
+    return limitEmojis(text) || limitEmojis(fallback);
   }
   catch {
-    return fallback;
+    return limitEmojis(fallback);
   }
   finally {
     clearTimeout(timer);
@@ -157,7 +144,7 @@ const gravities: Record<string, Gravity> = {
 };
 
 /** What the judge remembers about the people involved, written by the clerk from what they said; nothing when he knows nobody */
-const aboutPeople = (known: string) => known === "" ? "" : `What you know about the people involved (use it to handle them, tease them or adapt your tone; never quote it as a file):\n${known}`;
+export const aboutPeople = (known: string) => known === "" ? "" : `What you know about the people involved (use it to handle them, tease them or adapt your tone; never quote it as a file):\n${known}`;
 
 const profileInstructions = dedent`
   You are the clerk of the Tribunal of the Royaume, a Discord server of friends. You keep the file the judge reads on each member, so he never forgets anyone.
@@ -303,7 +290,7 @@ export const createJudge = (generate: Generate) => ({
     `,
       "",
     );
-    return text === "" ? null : text;
+    return limitEmojis(text, 0) || null;
   },
 
   /** The clerk recalls what has been said in the hearing in progress, from the transcript only */
@@ -354,21 +341,6 @@ export const createJudge = (generate: Generate) => ({
       `${lines}\n${dossier}`,
     );
   },
-
-  chat: async (authorName: string, message: string, known: string): Promise<string> => ask(
-    generate,
-    persona,
-    dedent`
-    ${authorName} talks to you outside of any trial: « ${message} ».
-    ${aboutPeople(known)}
-    Answer them like in a normal chat, briefly, the way that suits who they are.
-    Only if they ask what you can do, or seem lost, say you understand plain requests such as « ouvre un procès à @membre parce qu'il a volé mon croissant », « montre-moi le casier de @membre » or « tu te souviens du procès de @membre ? ».
-  `,
-    "Hm ? Pardon, je somnolais. Si tu veux un procès, dis-moi juste qui et pourquoi.",
-  ),
-
-  /** What the author of a message to the Tribunal wants, plain chat when the AI answer is unreadable */
-  interpret: async (message: string): Promise<Intent> => parseIntent(await ask(generate, interpretInstructions, `Message: « ${message} »`, `{"intent":"chat"}`)),
 
   screen: async (crime: string, accusedName: string, recentMessages: string[]): Promise<ScreenResult> => {
     const answer = await ask(

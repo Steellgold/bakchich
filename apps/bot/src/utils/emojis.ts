@@ -1,4 +1,4 @@
-/** Custom Discord emojis of the Tribunal, as message markup (Discord only, never shown on the website) */
+/** Custom emojis shared by Discord messages and the Activity; keep this module browser-safe. */
 export const EMOJI = {
   gavel: "<:gavel:1574428820721762314>",
   throne: "<:throne:1574428711468404736>",
@@ -30,4 +30,32 @@ export const EMOJI = {
   cross: "<:cross:1574427295379234856>",
   checkmark: "<:checkmark:1574427292317257868>",
   balancedScales: "<:balanced_scales:1574427290178293952>",
+  policeWarning: "<:police_warning:1574909145650434109>",
+  policeStern: "<:police_stern:1574909143356014835>",
+  policeSalute: "<:police_salute:1574909141133303889>",
+  policeArrest: "<:police_arrest:1574909138914246746>",
+  judgeThinking: "<:judge_thinking:1574912173132480643>",
+  judgeLaughing: "<:judge_laughing:1574912170926547064>",
+  judgeBribed: "<:judge_bribed:1574912168200110170>",
+  judgeAngry: "<:judge_angry:1574912166442827956>",
+  clerkWriting: "<:clerk_writing:1574909128206450839>",
+  clerkSurprised: "<:clerk_surprised:1574909125845065898>",
+  clerkNeutral: "<:clerk_neutral:1574909124037054475>",
+  clerkApproval: "<:clerk_approval:1574909122489614376>",
+  tiboRaf: "<:tibo_raf:1574932814837719140>",
 } as const;
+
+const allowedEmojis = new Set<string>(Object.values(EMOJI));
+
+/** One budget for a whole message, including its separate panel sections. */
+export const createEmojiLimiter = (maximum = 1) => {
+  let used = 0;
+  return (text: string): string => text.replace(/<a?:\w+:\d+>/gu, (emoji) => {
+    if (!allowedEmojis.has(emoji) || used >= maximum) return "";
+    used += 1;
+    return emoji;
+  });
+};
+
+/** Unknown custom emojis and any beyond the budget are removed; zero strips them for speech. */
+export const limitEmojis = (text: string, maximum = 1): string => createEmojiLimiter(maximum)(text).trim();

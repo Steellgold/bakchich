@@ -2,6 +2,9 @@ import type { Style } from "#/features/court/engine";
 import type { HearingRequest } from "#/features/hearings/hearing-request";
 import type { Message, MessageReplyOptions } from "discord.js";
 import { CLERK, fetchDossier, fetchTranscript, formatCaseFile, formatDossier, formatTranscript, searchArchives } from "#/features/clerk/clerk";
+import { historyOf, readableContent } from "#/features/commands/history";
+import { answerFromSources, converse, DEPRESSION_JOKE, DOZING, HELPLINES } from "#/features/counsel/counsel";
+import { formatRuling, saveRuling, searchRulings } from "#/features/counsel/rulings";
 import { parseCommand } from "#/features/court/command";
 import { court, judge } from "#/features/court/court";
 import { MAX_CRIME_LENGTH, normalizeCrime, sideOf } from "#/features/court/engine";
@@ -9,18 +12,24 @@ import { upsertMember } from "#/features/court/members";
 import { fetchRecord } from "#/features/court/record";
 import { requestHearing } from "#/features/hearings/hearing-request";
 import { collectContext, forceStartAnswers, forceStartHearing } from "#/features/hearings/hearings";
-import { knownAbout } from "#/features/profiles/profiles";
-import { AGENTS_CATEGORY_IDS, COLOR, conversation, discordClient, embedOf, findDiscordGuildMember, getCategoryId, sanitizeDiscordMessage, startDiscordTyping } from "#/integrations/discord";
+import { forgetMember, knownAbout, rememberMember } from "#/features/profiles/profiles";
+import { AGENTS_CATEGORY_IDS, COLOR, conversation, discordClient, embedOf, findDiscordGuildMember, getCategoryId, GUILD_IDS, sanitizeDiscordMessage, startDiscordTyping } from "#/integrations/discord";
+import { searchWeb } from "#/integrations/exa";
+import { limitEmojis } from "#/utils/emojis";
 import { logger } from "#/utils/logger";
 import { trigger } from "#/utils/trigger";
+import { MessageFlags, MessageType, TextDisplayBuilder } from "discord.js";
 
 const REASON_WAIT_MS = 60_000;
 const CONTEXT_LENGTH = 300;
 /** A member waits this long between two requests that need the AI: the free quota is shared by the whole server */
 const AI_COOLDOWN_MS = 20_000;
+const TRIALS_ONLY_IN_AGENTS = "Les procès se tiennent dans la catégorie AGENTS.";
 
 /** When each member last asked something that needed the AI */
 const lastAiRequest = new Map<string, number>();
+/** Members the court is waiting for (the reason of a trial), per channel: their answer is not a message to the judge */
+const awaitedAnswers = new Set<string>();
 
 // Game notices: an embed that can only ping the author, never @everyone, @here or roles.
 const reply = async (message: Message, text: string, color?: number, components?: MessageReplyOptions["components"]) => message.reply({
@@ -32,9 +41,18 @@ const reply = async (message: Message, text: string, color?: number, components?
   components,
 });
 
-// The judge or the clerk talking: plain text, same mention rules.
-const talk = async (message: Message, text: string) => message.reply({
-  content: sanitizeDiscordMessage(text),
+// The judge or the clerk talking, with an optional help footer in Components V2 and the same mention rules.
+const talk = async (message: Message, text: string, help?: string) => message.reply({
+  ...(help === undefined ? {
+    content: sanitizeDiscordMessage(text),
+    flags: MessageFlags.SuppressEmbeds,
+  } : {
+    components: [
+      new TextDisplayBuilder().setContent(sanitizeDiscordMessage(text)),
+      new TextDisplayBuilder().setContent(`-# *${sanitizeDiscordMessage(help)}*`),
+    ],
+    flags: [MessageFlags.IsComponentsV2, MessageFlags.SuppressEmbeds],
+  }),
   allowedMentions: {
     parse: [],
     repliedUser: true,
@@ -54,15 +72,6 @@ const requestOf = (message: Message<true>, style: Style): HearingRequest => ({
   style,
   reply: async (text, color, components) => reply(message, text, color, components),
 });
-
-/** Message text for the AI: without the bot mention, other mentions written « @Name [id:123] » so it knows who is who */
-const readableContent = (message: Message<true>, botId: string) => message.content
-  .replaceAll(`<@${botId}>`, "")
-  .replace(
-    /<@!?(\d+)>/gu,
-    (_mention, id: string) => `@${message.mentions.members.get(id)?.displayName ?? message.mentions.users.get(id)?.displayName ?? "?"} [id:${id}]`,
-  )
-  .trim();
 
 /** Members a natural request is about: the mentioned members, plus the author of the message replied to, and that message as context */
 const resolveAccused = async (message: Message<true>, botId: string): Promise<{
@@ -93,11 +102,15 @@ const resolveAccused = async (message: Message<true>, botId: string): Promise<{
 /** Ask the author why, and wait for their answer: null when it never comes or is not a valid accusation */
 const askReason = async (message: Message<true>): Promise<string | null> => {
   await reply(message, `Pour quel motif ? Réponds ici en moins de ${String(MAX_CRIME_LENGTH)} caractères, tu as ${String(REASON_WAIT_MS / 1000)} secondes.`);
-  const answers = await message.channel.awaitMessages({
-    filter: (answer) => answer.author.id === message.author.id,
-    max: 1,
-    time: REASON_WAIT_MS,
-  });
+  const key = `${message.channelId}:${message.author.id}`;
+  awaitedAnswers.add(key);
+  const answers = await message.channel
+    .awaitMessages({
+      filter: (answer) => answer.author.id === message.author.id,
+      max: 1,
+      time: REASON_WAIT_MS,
+    })
+    .finally(() => awaitedAnswers.delete(key));
 
   const answer = answers.first();
   return answer === undefined ? null : normalizeCrime(answer.content);
@@ -192,8 +205,32 @@ const recall = async (message: Message<true>, query: string, botId: string, cont
   await talk(message, `**${CLERK.name}** : ${await judge.recall(content, files.map(formatCaseFile))}`);
 };
 
-/** A mention of the bot in the AGENTS category: a command, or a plain request the AI reads */
-const answerMention = async (message: Message<true>, botId: string, command: ReturnType<typeof parseCommand>, stopTyping: () => void) => {
+/** The judge answers a conversation or renders a ruling; the code adds the number of the ruling and the helplines */
+const answer = async (message: Message<true>, content: string, said: string, ruling: boolean, danger: keyof typeof HELPLINES | null, depressionJoke = false) => {
+  const footer: string[] = [];
+
+  if (ruling && said !== "") {
+    const id = await saveRuling({
+      authorId: message.author.id,
+      authorName: authorName(message),
+      question: content,
+      decision: said,
+    });
+    footer.push(`-# Décision n°${String(id)}, versée à la jurisprudence du Royaume`);
+  }
+
+  const joke = depressionJoke && danger === null;
+  const help = danger === null ? (joke ? HELPLINES.suicide : undefined) : HELPLINES[danger];
+  const text = joke ? DEPRESSION_JOKE : said === "" ? DOZING : said;
+  await talk(message, limitEmojis([text, ...footer].join("\n\n"), danger === null ? 1 : 0), help);
+};
+
+/** A message to the bot: a command, or a plain request the AI reads; trials only in the AGENTS category */
+const answerMention = async (message: Message<true>, botId: string, command: ReturnType<typeof parseCommand>, stopTyping: () => void, inAgents: boolean) => {
+  if (command?.kind === "trial" && !inAgents) {
+    await reply(message, TRIALS_ONLY_IN_AGENTS, COLOR.refusal);
+    return;
+  }
   if (command?.kind === "trial") {
     await requestHearing(requestOf(message, "american"), command.accusedIds, command.crime, botId, null);
     return;
@@ -203,10 +240,65 @@ const answerMention = async (message: Message<true>, botId: string, command: Ret
     return;
   }
 
-  // Not a known command: the AI tells what the author wants, the code checks and acts.
+  // The AI tells what the author wants and may request older messages once; the code checks and acts.
   const content = readableContent(message, botId);
-  const intent = await judge.interpret(content);
+  const [history, known, precedents] = await Promise.all([
+    historyOf(message, botId),
+    knownAbout([message.author.id, ...message.mentions.users.keys()]),
+    searchRulings(content),
+  ]);
 
+  const asked = {
+    authorName: authorName(message),
+    message: content,
+    history,
+    historyExpanded: false,
+    known,
+    precedents: precedents.map(formatRuling),
+  };
+  let response = await converse(asked);
+  if (response.moreHistory && response.danger === null && (response.intent.kind === "chat" || response.intent.kind === "ruling")) {
+    const expanded = await historyOf(message, botId, true);
+    if (expanded.join("\n").length > asked.history.join("\n").length) {
+      asked.history = expanded;
+      asked.historyExpanded = true;
+      const withHistory = await converse(asked);
+      if (withHistory.reply !== "" || withHistory.danger !== null) response = withHistory;
+    }
+  }
+  const { intent, danger, depressionJoke, search, reply: said } = response;
+
+  // Someone who may be at risk gets an answer and the helplines, whatever they asked:
+  if (danger !== null || depressionJoke || intent.kind === "ruling") {
+    await answer(message, content, said, intent.kind === "ruling" && danger === null, danger, depressionJoke);
+    return;
+  }
+  // A question of law is checked on the web first, when the search is set up:
+  if (intent.kind === "chat") {
+    const sources = search === null ? [] : await searchWeb(search);
+    await answer(message, content, sources.length === 0 ? said : await answerFromSources(asked, said, sources), false, null);
+    return;
+  }
+  if (intent.kind === "forget") {
+    await forgetMember({
+      id: message.author.id,
+      name: authorName(message),
+    });
+    await talk(
+      message,
+      "C'est fait : la cour a oublié tout ce qu'elle savait sur toi et ne prend plus de notes. Ton casier, lui, reste : la justice n'oublie pas les condamnations.",
+    );
+    return;
+  }
+  if (intent.kind === "remember") {
+    await rememberMember(message.author.id);
+    await talk(message, "Très bien, la cour rouvre ton dossier. Elle reprend ses notes.");
+    return;
+  }
+  if (!inAgents && intent.kind !== "show-record" && intent.kind !== "recall") {
+    await reply(message, TRIALS_ONLY_IN_AGENTS, COLOR.refusal);
+    return;
+  }
   if (intent.kind === "open-trial") {
     const { ids, repliedId, context } = await resolveAccused(message, botId);
     // Among the members the message is about, the AI tells who is accused (not the victim); without an answer, the replied author, else everyone mentioned.
@@ -248,19 +340,16 @@ const answerMention = async (message: Message<true>, botId: string, command: Ret
     await recall(message, intent.query, botId, content);
     return;
   }
-  if (intent.kind === "show-record") {
-    const [targetId] = (await resolveAccused(message, botId)).ids;
 
-    if (targetId === undefined) {
-      await reply(message, "Le casier de qui ? Mentionne le membre ou réponds à son message.", COLOR.refusal);
-      return;
-    }
+  // Only show-record is left:
+  const [targetId] = (await resolveAccused(message, botId)).ids;
 
-    await showRecord(message, targetId);
+  if (targetId === undefined) {
+    await reply(message, "Le casier de qui ? Mentionne le membre ou réponds à son message.", COLOR.refusal);
     return;
   }
 
-  await talk(message, await judge.chat(authorName(message), content, await knownAbout([message.author.id, ...message.mentions.users.keys()])));
+  await showRecord(message, targetId);
 };
 
 trigger.discordEvent("messageCreate", async (message) => {
@@ -276,14 +365,18 @@ trigger.discordEvent("messageCreate", async (message) => {
     ignoreRepliedUser: true,
   });
 
-  // Outside the AGENTS category, the bot only answers explicit mentions:
-  if (!AGENTS_CATEGORY_IDS.includes(getCategoryId(message.channel) ?? "")) {
-    if (mentioned) await reply(message, "Le Tribunal ne siège que dans la catégorie AGENTS.", COLOR.refusal);
-    return;
-  }
+  const inAgents = AGENTS_CATEGORY_IDS.includes(getCategoryId(message.channel) ?? "");
+
+  // Outside the AGENTS category of the configured servers, the bot only answers explicit mentions:
+  if (!inAgents && (!mentioned || !GUILD_IDS.includes(message.guildId))) return;
+  // The answer the court is waiting for (the reason of a trial) is not a message to the judge:
+  if (awaitedAnswers.has(`${message.channelId}:${message.author.id}`)) return;
+
+  // In the AGENTS category, replying to one of its messages is talking to it too.
+  const repliesToBot = message.type === MessageType.Reply && message.mentions.repliedUser?.id === botUser.id;
 
   // Trials are pleaded out loud in the voice channel: written messages only matter when they talk to the bot.
-  if (!mentioned) {
+  if (!mentioned && !repliesToBot) {
     collectContext(message.channelId, message.author.id, message.content);
     return;
   }
@@ -308,6 +401,8 @@ trigger.discordEvent("messageCreate", async (message) => {
   const now = Date.now();
   const waitMs = (lastAiRequest.get(message.author.id) ?? 0) + AI_COOLDOWN_MS - now;
 
+  // A plain reply waits silently: no notice for each message of a conversation.
+  if (waitMs > 0 && !mentioned) return;
   if (waitMs > 0) {
     await reply(message, `La cour est débordée. Reviens dans ${String(Math.ceil(waitMs / 1000))} secondes.`, COLOR.refusal);
     return;
@@ -316,5 +411,5 @@ trigger.discordEvent("messageCreate", async (message) => {
   lastAiRequest.set(message.author.id, now);
 
   const stopTyping = startDiscordTyping(message.channel, () => logger.warn("Could not send the typing indicator"));
-  await answerMention(message, botUser.id, command, stopTyping).finally(stopTyping);
+  await answerMention(message, botUser.id, command, stopTyping, inAgents).finally(stopTyping);
 });

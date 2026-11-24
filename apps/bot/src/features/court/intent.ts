@@ -21,13 +21,19 @@ export type Intent = {
   kind: "recall";
   query: string;
 } | {
+  kind: "ruling";
+} | {
+  kind: "forget";
+} | {
+  kind: "remember";
+} | {
   kind: "chat";
 };
 
 const MAX_QUERY_LENGTH = 100;
 
 const schema = z.object({
-  intent: z.enum(["open-trial", "show-record", "start-now", "call-witness", "dismiss-witness", "recap", "recall", "chat"]),
+  intent: z.enum(["open-trial", "show-record", "start-now", "call-witness", "dismiss-witness", "recap", "recall", "ruling", "forget", "remember", "chat"]),
   accused: z.array(z.string()).nullish(),
   crime: z.string().nullish(),
   style: z.string().nullish(),

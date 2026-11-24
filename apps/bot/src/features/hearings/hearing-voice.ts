@@ -3,6 +3,7 @@ import { speak } from "#/integrations/piper";
 import { listen, playInVoice } from "#/integrations/voice";
 import { transcribe } from "#/integrations/whisper";
 import { attempt } from "#/utils/attempt";
+import { limitEmojis } from "#/utils/emojis";
 import { logger } from "#/utils/logger";
 import { trigger } from "#/utils/trigger";
 
@@ -45,5 +46,6 @@ const queueSpeech = async (previous: Promise<void>, voiceChannelId: string, text
 
 /** Speak a line out loud in a voice channel (Piper), after the lines already queued */
 export const speakInVoice = (voiceChannelId: string, text: string, speakerId: string): void => {
-  speaking = queueSpeech(speaking, voiceChannelId, text, speakerId);
+  const spoken = limitEmojis(text, 0);
+  if (spoken !== "") speaking = queueSpeech(speaking, voiceChannelId, spoken, speakerId);
 };

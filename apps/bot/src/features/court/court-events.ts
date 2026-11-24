@@ -2,7 +2,6 @@ import type { CourtEvent, Member, Phase, Trial, Verdict } from "#/features/court
 import type { Message } from "discord.js";
 import { CLERK, fetchTranscript, formatTranscript, JUDGE, recordLine } from "#/features/clerk/clerk";
 import { court, judge } from "#/features/court/court";
-import { EMOJI } from "#/features/court/emojis";
 import { AI_LAWYER, debateMs, formatNames, sideOf, VOTE_MS } from "#/features/court/engine";
 import { formatVerdictLine, verdictDetails } from "#/features/court/judge";
 import { saveTrial } from "#/features/court/record";
@@ -11,6 +10,7 @@ import { sentence as sentenceTrial } from "#/features/penalties/sentencing";
 import { knownAbout, noteLine } from "#/features/profiles/profiles";
 import { COLOR, discordClient, fetchDiscordSendableChannel, sanitizeDiscordMessage, sendPanel, sendSafeMessage, startDiscordTyping } from "#/integrations/discord";
 import { attempt } from "#/utils/attempt";
+import { EMOJI } from "#/utils/emojis";
 import { env } from "#/utils/env";
 import { logger } from "#/utils/logger";
 import { trigger } from "#/utils/trigger";
@@ -163,7 +163,7 @@ const verdictPanel = (trial: Trial, verdict: Verdict, sentence: string | null, s
   const panel = new ContainerBuilder()
     .setAccentColor(verdict.guilty ? COLOR.refusal : COLOR.acquittal)
     .addSectionComponents(
-      header(thumbnail, `-# Verdict officiel\n# ${verdict.guilty ? `${EMOJI.handcuffs} COUPABLE` : `${EMOJI.checkmark} NON COUPABLE`}\n${caseLine(trial)}`),
+      header(thumbnail, `-# Verdict officiel\n# ${verdict.guilty ? `${EMOJI.policeArrest} COUPABLE` : `${EMOJI.checkmark} NON COUPABLE`}\n${caseLine(trial)}`),
     );
   if (speech !== null) panel.addTextDisplayComponents(text(`>>> ${speech}`));
   panel.addSeparatorComponents((separator) => separator.setSpacing(SeparatorSpacingSize.Large));
@@ -205,7 +205,7 @@ const phaseLine = (trial: Trial): string | null => {
     };
 
   if (trial.phase === "vote") return trial.mode === "assizes" ? `Les débats sont clos ! Le jury et moi-même votons, et ma voix compte triple. Vous avez ${String(Math.round(VOTE_MS / 60_000))} minutes.` : `Les débats sont clos ! Le peuple a ${String(Math.round(VOTE_MS / 60_000))} minutes pour voter. Cliquez sur coupable ou non coupable.`;
-  if (trial.phase === "deliberation") return "Les débats sont clos. La cour se retire pour délibérer seule. Enfin, avec son croissant.";
+  if (trial.phase === "deliberation") return `Les débats sont clos. La cour se retire pour délibérer seule. Enfin, avec son croissant. ${EMOJI.judgeThinking}`;
 
   return lines[trial.phase] ?? null;
 };

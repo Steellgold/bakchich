@@ -233,6 +233,8 @@ export class World {
       z: bench.min.z - PLAYER_RADIUS - 0.05,
     };
     else if (state.role === null) state.position = { ...GATE };
+    // The witness seat is inside the stand box: step out on its open back side.
+    else if (state.role === "witness") state.position = { x: state.position.x, z: SEATS.witness.position.z + 1.15 };
   }
 
   /** Change the displayed trial: everyone leaves the restricted zone, then the new convoked players take their seats */

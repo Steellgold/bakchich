@@ -6,11 +6,12 @@ Tribunal is a Discord bot for the Royaume server. Members put each other on tria
 
 ## Features
 
+- Talk with the judge: he follows the conversation, answers questions of law and ethics for real (with sources from the web through Exa), and settles disputes (« tranche : pizza ananas ou pas »), each ruling saved as the case law of the Royaume.
 - Open a trial with a mention or the « Ouvrir un procès » message command.
 - Plead in a voice channel: the judge speaks, listens and gives the floor. Lawyers, witnesses and objections included.
 - Vote as a jury, or let the judge decide alone on light cases.
 - Serve real sentences: end every message with « avec ce doux fromage » for an hour, and each slip adds time.
-- Read criminal records, case files and the clerk's notes on every member with `/fiche`.
+- Read criminal records, case files and the clerk's notes on every member with `/fiche`. « Oublie-moi » erases yours.
 - Walk into a 3D courtroom from Discord: sit, vote, throw tomatoes, start a fight.
 
 ## Architecture

@@ -78,7 +78,14 @@ export const ARCHIVES: Vec2 = {
 };
 export const ARCHIVES_RADIUS = 1.4;
 
-/** Side door on the right wall, decorative until phase 4 */
+/** The entrance door, in the middle of the back wall: members come in and go out through it */
+export const ENTRANCE: Vec2 = {
+  x: 0,
+  z: DEPTH,
+};
+export const ENTRANCE_WIDTH = 1.6;
+
+/** Side door on the right wall, where the police comes in */
 export const SIDE_DOOR: Vec2 = {
   x: HALF_WIDTH,
   z: 11,
@@ -143,7 +150,8 @@ export const SEATS = {
   accused: Array.from({ length: 5 }, (_, index) => seat(`accused-${String(index)}`, -7, 7.5 + index, Math.PI / 2)),
   prosecutor: seat("prosecutor", -2.5, 9, Math.PI),
   defense: seat("defense", 2.5, 9, Math.PI),
-  witness: seat("witness", 6.5, 3.2, Math.PI),
+  // Inside the witness stand, facing the room:
+  witness: seat("witness", 6.5, 1.75, 0),
   jury: Array.from({ length: 12 }, (_, index) => seat(`jury-${String(index)}`, index % 2 === 0 ? 6.5 : 8.5, 5.5 + Math.floor(index / 2) * 1.1, -Math.PI / 2)),
   benches: BENCH_ROWS.flatMap((z, row) => BENCH_SIDES.flatMap(([minX, maxX], side) => Array.from({ length: SEATS_PER_BENCH }, (_, index) => seat(`bench-${String(row)}-${String(side)}-${String(index)}`, minX + ((maxX - minX) / SEATS_PER_BENCH) * (index + 0.5), z + BENCH_DEPTH / 2, Math.PI)),
   ),

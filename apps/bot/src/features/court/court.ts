@@ -8,7 +8,7 @@ import { logger } from "#/utils/logger";
 import { generateText } from "ai";
 
 // Tries each free model in order, moving to the next one on any failure, until the shared timeout:
-const generate: Generate = async (instructions, prompt) => {
+export const generate: Generate = async (instructions, prompt) => {
   if (openRouterQuota.isExhausted()) throw new Error("OpenRouter quota exhausted");
 
   const abortSignal = AbortSignal.timeout(JUDGE_TIMEOUT_MS);

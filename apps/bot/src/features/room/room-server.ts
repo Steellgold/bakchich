@@ -20,6 +20,7 @@ import { AGENTS_CATEGORY_IDS, discordClient, findDiscordGuildMember, GUILD_IDS }
 import { fetchSession } from "#/integrations/session";
 import { speakingIds, speakingLevels } from "#/integrations/voice";
 import { attempt } from "#/utils/attempt";
+import { EMOJI, limitEmojis } from "#/utils/emojis";
 import { env } from "#/utils/env";
 import { logger } from "#/utils/logger";
 import { trigger } from "#/utils/trigger";
@@ -191,7 +192,7 @@ const OBJECTION_REBUKES = [
   "Encore une objection depuis les bancs et je fais évacuer la salle.",
 ] as const;
 
-const FIGHT_REBUKES = ["Trouble à l'audience ! Gardes, sortez-moi ces deux énergumènes.", "On se bat dans mon tribunal ? Ce sera noté au casier."] as const;
+const FIGHT_REBUKES = [`Trouble à l'audience ! Gardes, sortez-moi ces deux énergumènes. ${EMOJI.policeArrest}`, `On se bat dans mon tribunal ? Ce sera noté au casier. ${EMOJI.policeWarning}`] as const;
 
 /** The judge rebukes the room out loud, only during a trial and not too often */
 const rebuke = (lines: readonly string[]) => {
@@ -577,14 +578,14 @@ let lastShownTrialId: string | null = null;
 court.on("event", (event) => {
   if (event.type === "sentenced" && event.trial.id === lastShownTrialId) broadcast({
     type: "verdict",
-    line: formatVerdictLine(event.verdict, event.sentence),
+    line: limitEmojis(`${formatVerdictLine(event.verdict, event.sentence)} ${event.verdict.guilty ? EMOJI.policeArrest : EMOJI.clerkApproval}`),
   });
   if (event.trial.id !== displayed?.id) return;
 
   if (event.type === "speech") broadcast({
     type: "speech",
     speakerId: event.speakerId,
-    text: event.text,
+    text: limitEmojis(event.text),
   });
 });
 

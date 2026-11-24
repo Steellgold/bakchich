@@ -8,8 +8,8 @@ export type RpsPick = "rock" | "paper" | "scissors";
 export const CONNECT4_COLUMNS = 7;
 export const CONNECT4_ROWS = 6;
 
-/** How close a target must be to throw, whisper, challenge or fight */
-export const CHAOS_REACH = 3;
+/** How close a target must be to throw, whisper, challenge or fight: face to face or side by side */
+export const CHAOS_REACH = 2;
 const TOMATO_COOLDOWN_MS = 6_000;
 const RUMOR_COOLDOWN_MS = 60_000;
 const OBJECTION_COOLDOWN_MS = 20_000;

@@ -37,7 +37,8 @@ trigger.discordEvent("interactionCreate", async (interaction) => {
   ]);
 
   const name = interaction.guild?.members.cache.get(user.id)?.displayName ?? file?.name ?? user.displayName;
-  const notes = file?.profile ?? (user.bot ? "Une machine. La cour s'en méfie." : "Le juge ne le connaît pas encore. Ça ne va pas durer.");
+  const notes
+    = file?.forgotten === true ? "A demandé à être oublié. La cour a obéi, à contrecœur." : (file?.profile ?? (user.bot ? "Une machine. La cour s'en méfie." : "Le juge ne le connaît pas encore. Ça ne va pas durer."));
 
   const panel = new ContainerBuilder()
     .setAccentColor(COLOR.court)

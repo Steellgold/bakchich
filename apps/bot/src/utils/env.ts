@@ -33,6 +33,9 @@ const schema = z.object({
   // Self-hosted whisper.cpp server that transcribes what is said in the hearings (text only, audio never kept):
   WHISPER_URL: z.url().default("http://localhost:8080"),
 
+  // Exa key for the web search behind the judge's legal answers, empty to answer without sources:
+  EXA_API_KEY: z.string().default(""),
+
   // Public address of the web app: it draws the avatar mosaic of trials with several accused (empty: the first avatar only):
   WEB_PUBLIC_URL: z.string().default(""),
 

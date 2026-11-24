@@ -1,7 +1,8 @@
 import type { ApplicationCommandDataResolvable, Channel, ContainerBuilder, Guild, GuildMember, Message, MessageCreateOptions, SendableChannels } from "discord.js";
+import { createEmojiLimiter, limitEmojis } from "#/utils/emojis";
 import { env } from "#/utils/env";
 import { logger } from "#/utils/logger";
-import { ActivityType, ChannelType, Client, DiscordAPIError, EmbedBuilder, GatewayIntentBits, GuildScheduledEventEntityType, GuildScheduledEventPrivacyLevel, GuildScheduledEventStatus, MessageFlags, Partials, RESTJSONErrorCodes } from "discord.js";
+import { ActivityType, ChannelType, Client, ComponentType, DiscordAPIError, EmbedBuilder, GatewayIntentBits, GuildScheduledEventEntityType, GuildScheduledEventPrivacyLevel, GuildScheduledEventStatus, MessageFlags, Partials, RESTJSONErrorCodes } from "discord.js";
 
 export const DISCORD_MAX_MESSAGE_LENGTH = 2000;
 
@@ -15,7 +16,7 @@ export const GUILD_IDS = env.DISCORD_GUILD_ID;
 const voiceCategoryOf = (guild: Guild): string | null => env.DISCORD_VOICE_CATEGORY_ID.find((id) => guild.channels.cache.has(id)) ?? null;
 
 // Neutralizes mass-ping mentions into inert text so the bot can never ping everyone in a guild channel (low-level helper shared by the send tools):
-export const sanitizeDiscordMessage = (text: string): string => text.replace(/@(everyone|here)/giu, "@{$1}").slice(0, DISCORD_MAX_MESSAGE_LENGTH);
+export const sanitizeDiscordMessage = (text: string): string => limitEmojis(text.replace(/@(everyone|here)/giu, "@{$1}")).slice(0, DISCORD_MAX_MESSAGE_LENGTH);
 
 // Matches lines imitating the system prefix "[Label (ID 123456789)] :". Forged prefixes found inside
 // message contents are neutralized at render time with fullwidth brackets, so the exact system format
@@ -137,13 +138,23 @@ export const sendSafeMessage = async (
 });
 
 /** Send a rich message laid out with Components V2 (such a message has no text content and no embed), which never pings anyone */
-export const sendPanel = async (channel: SendableChannels, panel: ContainerBuilder): Promise<Message> => channel.send({
-  components: [panel],
-  flags: MessageFlags.IsComponentsV2,
-  allowedMentions: {
-    parse: [],
-  },
-});
+export const sendPanel = async (channel: SendableChannels, panel: ContainerBuilder): Promise<Message> => {
+  const data = panel.toJSON();
+  const limit = createEmojiLimiter();
+  for (const component of data.components) {
+    if (component.type === ComponentType.TextDisplay) component.content = limit(component.content);
+    if (component.type === ComponentType.Section) {
+      for (const display of component.components) display.content = limit(display.content);
+    }
+  }
+  return channel.send({
+    components: [data],
+    flags: MessageFlags.IsComponentsV2,
+    allowedMentions: {
+      parse: [],
+    },
+  });
+};
 
 /** Scheduled event of a hearing in its voice channel, null when Discord refuses (the hearing then goes on without an event) */
 const createHearingEvent = async (guild: Guild, channelId: string, input: {

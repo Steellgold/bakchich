@@ -4,7 +4,7 @@ import type { Vec2 } from "@tribunal/bot/room/layout";
 import type { ClientMessage, TrialView } from "@tribunal/bot/room/protocol";
 import type { PlayerState } from "@tribunal/bot/room/world";
 import { Character } from "./character/character";
-import { isBenchSeat } from "./seats";
+import { isBenchSeat, seatElevation } from "./seats";
 import { useFrame, useThree } from "@react-three/fiber";
 import { CHAOS_REACH } from "@tribunal/bot/room/chaos";
 import { ARCHIVES, ARCHIVES_RADIUS, GATE, GATE_RADIUS, MAX_SPEED, ROOM, RUN_SPEED, TICK_MS } from "@tribunal/bot/room/layout";
@@ -58,8 +58,8 @@ const SELF_KEYS: Record<string, ClientMessage> = {
   KeyO: { type: "shout-objection" },
   KeyB: { type: "toggle-sleep" },
 };
-/** The tomato flies further than a whisper carries */
-export const TARGET_RANGE = CHAOS_REACH * 3;
+/** The chaos bar only shows up next to someone (the server still lets a tomato fly a bit further, for latency) */
+export const TARGET_RANGE = CHAOS_REACH;
 
 type PlayerControllerProps = {
   self: PlayerState;
@@ -75,13 +75,14 @@ type PlayerControllerProps = {
   level: number;
   jumpAt: number;
   sleeping: boolean;
+  leanSide: -1 | 0 | 1;
   splat: boolean;
   fighting: boolean;
 };
 
 /** The local player: keyboard movement with prediction, third-person camera and the E interaction */
 export const PlayerController
-  = ({ self, trial, speech, speaking, send, occupiedSeats, onInteraction, others, onTarget, level, jumpAt, sleeping, splat, fighting }: PlayerControllerProps) => {
+  = ({ self, trial, speech, speaking, send, occupiedSeats, onInteraction, others, onTarget, level, jumpAt, sleeping, leanSide, splat, fighting }: PlayerControllerProps) => {
     const camera = useThree((state) => state.camera);
     const canvas = useThree((state) => state.gl.domElement);
     const pressedRef = useRef(new Set<string>());
@@ -250,11 +251,13 @@ export const PlayerController
         rotation={self.seatId === null ? facingRef.current : self.rotation}
         seated={self.seatId !== null}
         onBench={isBenchSeat(self.seatId)}
+        elevation={seatElevation(self.seatId)}
         speech={speech}
         speaking={speaking}
         level={level}
         jumpAt={jumpAt}
         sleeping={sleeping}
+        leanSide={leanSide}
         splat={splat}
         fighting={fighting}
       />

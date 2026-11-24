@@ -25,7 +25,7 @@ export const fetchSession = async (credentials:
   }): Promise<{
     discordId: string | null;
   } | null> => {
-  const headers = "cookie" in credentials ? { cookie: credentials.cookie } : { authorization: `Bearer ${credentials.token}` };
+  const headers: Record<string, string> = "cookie" in credentials ? { cookie: credentials.cookie } : { authorization: `Bearer ${credentials.token}` };
   const response = await fetch(`${env.WEB_INTERNAL_URL}/api/auth/get-session`, {
     headers,
     signal: AbortSignal.timeout(SESSION_TIMEOUT_MS),

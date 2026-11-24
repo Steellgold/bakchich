@@ -29,6 +29,7 @@ services:
       PIPER_URL: http://tts:5000
       PIPER_SPEAKER: ${PIPER_SPEAKER-8582}
       WHISPER_URL: http://stt:8080
+      EXA_API_KEY: ${EXA_API_KEY:-}
       ROOM_PORT: "3001"
       WEB_INTERNAL_URL: http://web:3000
       WEB_PUBLIC_URL: https://tribunal.gaetanhus.fr

@@ -7,7 +7,7 @@ A Discord bot for the « Le Royaume » community: members put each other on tria
 - **Code decides, AI talks** – the court engine owns every rule (phases, timers, votes, verdict, records). The AI writes text from facts the code gives it and may return a structured intent (open a trial, show a record, chat) that the code validates before acting. It never calls Discord or the database itself.
 - **Limited Discord writes** – the bot sends messages, edits its own messages, shows the typing indicator, answers button interactions, creates a voice channel and a scheduled event for each hearing in the audio category (`DISCORD_VOICE_CATEGORY_ID`), deletes the channels it created, creates a short-lived voice room where the accused prepare their defense, registers the « Ouvrir un procès » message command and the `/chexclude` and `/fiche` commands, and enforces sentences in every text channel (reminder replies and reactions, see the confirmed exceptions). Nothing else.
 - **Listening, never recording** – the bot joins the voice channel of its hearing (and the preparation room of a court-appointed lawyer) to speak (Piper) and to listen: each utterance is decoded in memory, sent to the self-hosted Whisper service, and only the text is kept (the clerk's transcript). Audio is never written to disk, stored or sent anywhere else.
-- **Stupid on purpose** – the tone is a ridiculous, corrupt judge. Never serious, never moralizing.
+- **Funny in the form, right in the substance** – the tone is a ridiculous, corrupt judge, never moralizing. When members ask about law or ethics, the answer itself must be correct, and when someone seems really at risk the jokes stop and the code adds the helplines.
 
 ## Agent approach
 - Be ultra-pragmatic: never over-engineer, never build anything that was not asked for, always prefer absolute simplicity.
@@ -39,9 +39,10 @@ pnpm monorepo with exactly two apps, no shared package. Code is organized **by f
 - `src/features/room` — The 3D courtroom: layout, world simulation, chaos of the audience (games, tomatoes, fights), WebSocket protocol, access and server.
 - `src/features/commands` — Discord entry points: mentions of the bot, buttons, the message command and its form.
 - `src/features/penalties` — Enforced sentences: the rule each convict must follow in their messages, the watcher that checks every message and extends the sentence, and the channel exclusions (`/chexclude`).
+- `src/features/counsel` — The judge outside of trials: conversation that follows the channel, questions of law and ethics, rulings saved as the case law of the Royaume, helplines when someone is at risk.
 - `src/features/profiles` — The judge's memory of every member: messages of the server and lines heard in hearings are buffered in memory, then the clerk (AI) rewrites a short profile per member, stored in `member.profile`, which the judge reads whenever he talks to or about someone.
 - `src/tables` — Drizzle schema, one file per table.
-- `src/integrations` — One file per external system (Discord, voice, OpenRouter, Piper, Whisper, web session): clients and low-level helpers.
+- `src/integrations` — One file per external system (Discord, voice, OpenRouter, Piper, Whisper, Exa, web session): clients and low-level helpers.
 - `src/utils` — Shared helpers, including `postgres` for the Drizzle client, migrations and reusable columns.
 
 Dependencies flow one way: `features → tables / integrations → utils`. No file-level import cycles between features.
