@@ -5,6 +5,7 @@ import type { World } from "#/features/room/world";
 import type { WebSocket } from "ws";
 import { recordIncident } from "#/features/clerk/clerk";
 import { court, judge } from "#/features/court/court";
+import { isTest } from "#/features/court/engine";
 import { judgeSays } from "#/features/hearings/hearings";
 import { Chaos, CHAOS_REACH } from "#/features/room/chaos";
 import { findGamePlacement, gamePlayerPositions } from "#/features/room/game-placement";
@@ -283,7 +284,7 @@ export const createRoomChaos = ({ world, send, sendTo, broadcast, displayedTrial
     const { expelled } = chaos.tick(now, dtSeconds, (id) => world.player(id)?.position);
     for (const id of expelled) {
       world.expel(id);
-      recordTrouble(id);
+      if (!isTest(displayedTrial())) recordTrouble(id);
     }
     if (expelled.length > 0) rebuke(FIGHT_REBUKES);
   };

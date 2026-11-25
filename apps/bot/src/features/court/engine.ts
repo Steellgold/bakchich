@@ -32,6 +32,15 @@ export type Gravity = "light" | "ordinary" | "serious";
 export type Mode = "jury" | "bench" | "assizes";
 export type Side = "prosecution" | "defense";
 
+/** Scaled-down durations of a test trial (ms): phases missing from `phases` keep their real length */
+export type TestTiming = {
+  phases: Partial<Record<Phase, number>>;
+  vote: number;
+  deliberation: number;
+  witnessStage: number;
+  noWitness: number;
+};
+
 export type Phase
   = "opening" | "examination" | "prosecution" | "defense" | "witnesses" | "closing-prosecution" | "closing-defense" | "last-word" | "vote" | "deliberation";
 
@@ -100,7 +109,18 @@ const SCHEDULES: Record<
 };
 
 /** Total length of the debate before the vote or the deliberation */
-export const debateMs = (style: Style): number => SCHEDULES[style].reduce((total, step) => total + step.ms, 0);
+export const debateMs = (style: Style, test: TestTiming | null = null): number => SCHEDULES[style].reduce((total, step) => total + (test?.phases[step.phase] ?? step.ms), 0);
+
+/** Length of a phase of the schedule, scaled down in a test trial */
+const stepMs = (test: TestTiming | null, step: { phase: Phase; ms: number }): number => test?.phases[step.phase] ?? step.ms;
+
+/** Length of the vote of a trial */
+export const voteMs = (trial: Pick<Trial, "test">): number => trial.test?.vote ?? VOTE_MS;
+
+const witnessStageMs = (trial: Pick<Trial, "test">): number => trial.test?.witnessStage ?? WITNESS_STAGE_MS;
+
+/** A test trial writes nothing to permanent storage (record, transcript, case file, sentence, profiles, incidents) */
+export const isTest = (trial: Pick<Trial, "test"> | null | undefined): boolean => trial !== null && trial !== undefined && trial.test !== null;
 
 export type Witness = {
   member: Member;
@@ -120,6 +140,8 @@ export type Trial = {
   context: string | null;
   style: Style;
   mode: Mode;
+  /** Scaled-down durations when this is a test trial, null for a real one */
+  test: TestTiming | null;
   phase: Phase;
   /** Member on the witness stand, called by the prosecution or the defense */
   witness: Witness | null;
@@ -328,6 +350,7 @@ export class Court extends EventEmitter<{
     context: string | null;
     style: Style;
     mode: Mode;
+    test?: TestTiming;
   }): Trial | "busy" {
     if (this.states.has(input.channelId)) return "busy";
 
@@ -337,13 +360,14 @@ export class Court extends EventEmitter<{
 
     const trial: Trial = {
       ...input,
+      test: input.test ?? null,
       id: randomUUID(),
       phase: first.phase,
       witness: null,
       witnessesCalled: [],
       votes: new Map(),
       startedAt: new Date(),
-      phaseEndsAt: Date.now() + first.ms,
+      phaseEndsAt: Date.now() + stepMs(input.test ?? null, first),
     };
     this.states.set(input.channelId, trial);
     this.emit("event", {
@@ -366,7 +390,7 @@ export class Court extends EventEmitter<{
       member: witness,
       calledBy,
       stage: "examination",
-      stageEndsAt: Date.now() + WITNESS_STAGE_MS,
+      stageEndsAt: Date.now() + witnessStageMs(trial),
     };
     if (!trial.witnessesCalled.some((member) => member.id === witness.id)) trial.witnessesCalled.push(witness);
     this.emit("event", {
@@ -429,12 +453,12 @@ export class Court extends EventEmitter<{
     if (step.phase === "witnesses") {
       setTimeout(() => {
         if (trial.phase === "witnesses" && trial.witnessesCalled.length === 0 && this.get(trial.channelId) === trial) this.advance(trial, index + 1);
-      }, NO_WITNESS_MS).unref();
+      }, trial.test?.noWitness ?? NO_WITNESS_MS).unref();
     }
 
     setTimeout(() => {
       if (trial.phase === step.phase && this.get(trial.channelId) === trial) this.advance(trial, index + 1);
-    }, step.ms).unref();
+    }, stepMs(trial.test, step)).unref();
   }
 
   private advance(trial: Trial, index: number): void {
@@ -444,7 +468,7 @@ export class Court extends EventEmitter<{
 
     if (step !== undefined) {
       trial.phase = step.phase;
-      trial.phaseEndsAt = Date.now() + step.ms;
+      trial.phaseEndsAt = Date.now() + stepMs(trial.test, step);
       this.emit("event", {
         type: "phase",
         trial,
@@ -456,7 +480,8 @@ export class Court extends EventEmitter<{
     // The debate is over: the people vote, or the judge deliberates alone.
     const judgeOnly = trial.mode === "bench";
     trial.phase = judgeOnly ? "deliberation" : "vote";
-    trial.phaseEndsAt = Date.now() + (judgeOnly ? DELIBERATION_MS : VOTE_MS);
+    const closeMs = judgeOnly ? (trial.test?.deliberation ?? DELIBERATION_MS) : voteMs(trial);
+    trial.phaseEndsAt = Date.now() + closeMs;
     this.emit("event", {
       type: "phase",
       trial,
@@ -466,7 +491,7 @@ export class Court extends EventEmitter<{
       () => {
         void this.close(trial);
       },
-      judgeOnly ? DELIBERATION_MS : VOTE_MS,
+      closeMs,
     ).unref();
   }
 
@@ -495,7 +520,7 @@ export class Court extends EventEmitter<{
           trial.witness = {
             ...witness,
             stage: "cross",
-            stageEndsAt: Date.now() + WITNESS_STAGE_MS,
+            stageEndsAt: Date.now() + witnessStageMs(trial),
           };
           this.emit("event", {
             type: "witness",
@@ -507,7 +532,7 @@ export class Court extends EventEmitter<{
         }
 
         this.releaseWitness(trial);
-      }, WITNESS_STAGE_MS).unref(),
+      }, witnessStageMs(trial)).unref(),
     );
   }
 

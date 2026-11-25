@@ -3,17 +3,21 @@ import type { HearingRequest } from "#/features/hearings/hearing-request";
 import type { Message, MessageReplyOptions } from "discord.js";
 import { CLERK, fetchDossier, fetchTranscript, formatCaseFile, formatDossier, formatTranscript, searchArchives } from "#/features/clerk/clerk";
 import { historyOf, readableContent } from "#/features/commands/history";
-import { answerFromSources, converse, DEPRESSION_JOKE, DOZING, HELPLINES } from "#/features/counsel/counsel";
+import { bufferLine, listening, openWindow, takeBatch } from "#/features/commands/listen";
+import { answerFromSources, converse, DEPRESSION_JOKE, DISTRESS_FALLBACK, DOZING, HELPLINES } from "#/features/counsel/counsel";
 import { formatRuling, saveRuling, searchRulings } from "#/features/counsel/rulings";
 import { parseCommand } from "#/features/court/command";
 import { court, judge } from "#/features/court/court";
-import { MAX_CRIME_LENGTH, normalizeCrime, sideOf } from "#/features/court/engine";
+import { isTest, MAX_CRIME_LENGTH, normalizeCrime, sideOf } from "#/features/court/engine";
 import { upsertMember } from "#/features/court/members";
 import { fetchRecord } from "#/features/court/record";
+import { isTestGuild } from "#/features/court/test-config";
+import { startTestTrial } from "#/features/court/test-trial";
 import { requestHearing } from "#/features/hearings/hearing-request";
 import { collectContext, forceStartAnswers, forceStartHearing } from "#/features/hearings/hearings";
+import { isExcluded } from "#/features/penalties/penalty-store";
 import { forgetMember, knownAbout, rememberMember } from "#/features/profiles/profiles";
-import { AGENTS_CATEGORY_IDS, COLOR, conversation, discordClient, embedOf, findDiscordGuildMember, getCategoryId, GUILD_IDS, sanitizeDiscordMessage, startDiscordTyping } from "#/integrations/discord";
+import { AGENTS_CATEGORY_IDS, channelChain, COLOR, conversation, discordClient, embedOf, findDiscordGuildMember, getCategoryId, GUILD_IDS, sanitizeDiscordMessage, startDiscordTyping } from "#/integrations/discord";
 import { searchWeb } from "#/integrations/exa";
 import { limitEmojis } from "#/utils/emojis";
 import { logger } from "#/utils/logger";
@@ -25,6 +29,8 @@ const CONTEXT_LENGTH = 300;
 /** A member waits this long between two requests that need the AI: the free quota is shared by the whole server */
 const AI_COOLDOWN_MS = 20_000;
 const TRIALS_ONLY_IN_AGENTS = "Les procès se tiennent dans la catégorie AGENTS.";
+/** « @bot procès test »: a short trial played by the bot itself, for the owner only */
+const TEST_TRIAL_PATTERN = /\bproc[eè]s\s+test\b/iu;
 
 /** When each member last asked something that needed the AI */
 const lastAiRequest = new Map<string, number>();
@@ -220,9 +226,25 @@ const answer = async (message: Message<true>, content: string, said: string, rul
   }
 
   const joke = depressionJoke && danger === null;
-  const help = danger === null ? (joke ? HELPLINES.suicide : undefined) : HELPLINES[danger];
-  const text = joke ? DEPRESSION_JOKE : said === "" ? DOZING : said;
+  // No usable reply to a message about depression: never doze, answer seriously with the helplines
+  const distress = !joke && danger === null && said === "" && (/d[ée]press/iu).test(content);
+  const help = danger === null ? (joke || distress ? HELPLINES.suicide : undefined) : HELPLINES[danger];
+  const text = joke ? DEPRESSION_JOKE : distress ? DISTRESS_FALLBACK : said === "" ? DOZING : said;
   await talk(message, limitEmojis([text, ...footer].join("\n\n"), danger === null ? 1 : 0), help);
+};
+
+/** Starts a test trial in the test guild's AGENTS category (virtual parties, short phases, nothing stored) */
+const answerTestTrial = async (message: Message<true>, inAgents: boolean) => {
+  if (!isTestGuild(message.guildId) || !inAgents) {
+    await reply(message, TRIALS_ONLY_IN_AGENTS, COLOR.refusal);
+    return;
+  }
+  if (startTestTrial(message.channelId) === "busy") {
+    await reply(message, "La cour est occupée, revenez plus tard.", COLOR.refusal);
+    return;
+  }
+
+  await reply(message, "Procès test lancé : environ 5 minutes, parties jouées par le bot, rien n'est enregistré. Écris dans le salon pour qu'on t'entende, et vote quand le vote ouvre.");
 };
 
 /** A message to the bot: a command, or a plain request the AI reads; trials only in the AGENTS category */
@@ -352,6 +374,57 @@ const answerMention = async (message: Message<true>, botId: string, command: Ret
   await showRecord(message, targetId);
 };
 
+/** One timer per listening channel; cleared and replaced each time the window moves, so nothing leaks */
+const listenTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** Ambient listening: ONE AI call answers the whole batch. Same danger, depression and helplines path as a mention, but never a command */
+const answerBatch = async (anchor: Message<true>, botId: string, batch: string[]) => {
+  const content = batch.join("\n");
+  const [history, known] = await Promise.all([
+    historyOf(anchor, botId),
+    knownAbout([...new Set([anchor.author.id, ...anchor.mentions.users.keys()])]),
+  ]);
+  const { intent, danger, depressionJoke, reply: said } = await converse({
+    authorName: "Les membres du salon",
+    message: content,
+    history,
+    known,
+    precedents: [],
+  });
+
+  // Stay silent unless it is a plain conversation or someone may be at risk (a distress with no usable reply still gets the serious fallback in answer()):
+  const distress = (/d[ée]press/iu).test(content);
+  if (danger === null && !depressionJoke && (intent.kind !== "chat" || (said === "" && !distress))) return;
+  // A ruling is never saved from the listen mode: nothing is stored.
+  await answer(anchor, content, said, false, danger, depressionJoke);
+};
+
+/** Answer the batch of a channel when its window is over, then keep the timer going while the window is open */
+const scheduleListen = (anchor: Message<true>, botId: string) => {
+  const { channelId } = anchor;
+  clearTimeout(listenTimers.get(channelId));
+  const state = listening.get(channelId);
+
+  if (state === undefined) {
+    listenTimers.delete(channelId);
+    return;
+  }
+
+  const timer = setTimeout(
+    trigger.safeListener("Listen batch", async () => {
+      listenTimers.delete(channelId);
+      const batch = takeBatch(channelId, Date.now());
+      scheduleListen(anchor, botId);
+      if (batch === null || isExcluded(channelChain(anchor))) return;
+      const stopTyping = startDiscordTyping(anchor.channel, () => logger.warn("Could not send the typing indicator"));
+      await answerBatch(anchor, botId, batch).finally(stopTyping);
+    }),
+    Math.max(0, state.endsAt - Date.now()),
+  );
+  timer.unref();
+  listenTimers.set(channelId, timer);
+};
+
 trigger.discordEvent("messageCreate", async (message) => {
   if (message.author.bot || !message.inGuild()) return;
 
@@ -377,7 +450,18 @@ trigger.discordEvent("messageCreate", async (message) => {
 
   // Trials are pleaded out loud in the voice channel: written messages only matter when they talk to the bot.
   if (!mentioned && !repliesToBot) {
+    // During a test trial, what is written in its channel is heard as a line of the hearing:
+    if (isTest(court.get(message.channelId))) court.say(message.channelId, message.author.id, readableContent(message, botUser.id));
     collectContext(message.channelId, message.author.id, message.content);
+    // Ambient listening, AGENTS category only (project rule): no window is ever opened elsewhere, and none during a trial.
+    if (inAgents && court.get(message.channelId) === undefined && !isExcluded(channelChain(message)) && bufferLine(message.channelId, false, `${authorName(message)} : ${readableContent(message, botUser.id)}`, Date.now())) {
+      scheduleListen(message, botUser.id);
+    }
+    return;
+  }
+
+  if (mentioned && TEST_TRIAL_PATTERN.test(message.content)) {
+    await answerTestTrial(message, inAgents);
     return;
   }
 
@@ -412,4 +496,9 @@ trigger.discordEvent("messageCreate", async (message) => {
 
   const stopTyping = startDiscordTyping(message.channel, () => logger.warn("Could not send the typing indicator"));
   await answerMention(message, botUser.id, command, stopTyping, inAgents).finally(stopTyping);
+
+  // Open the listening window after the answer: AGENTS category only, never during a trial or in an excluded channel
+  if (inAgents && court.get(message.channelId) === undefined && !isExcluded(channelChain(message)) && openWindow(message.channelId, message.author.id, Date.now())) {
+    scheduleListen(message, botUser.id);
+  }
 });

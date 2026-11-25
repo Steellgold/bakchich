@@ -176,7 +176,7 @@ export const createJudge = (generate: Generate) => ({
     Accused: ${accusedNames(trial)}. Prosecutor (plaintiff): ${trial.plaintiff.name}. Defense: ${trial.lawyer?.name ?? "nobody, the accused defend themselves"}.
     Crime: « ${trial.crime} ».${trial.context === null ? "" : `\nThe message the case is about: ${trial.context}`}
     ${aboutPeople(known)}
-    Announce that the trial is judged ${MODE_TEXT[trial.mode]}, in the ${STYLE_TEXT[trial.style]} style, that it lasts about ${String(minutes(debateMs(trial.style)))} minutes, and that everyone pleads out loud in the voice channel when given the floor.
+    Announce that the trial is judged ${MODE_TEXT[trial.mode]}, in the ${STYLE_TEXT[trial.style]} style, that it lasts about ${String(minutes(debateMs(trial.style, trial.test)))} minutes, and that everyone pleads out loud in the voice channel when given the floor.
   `,
     `Bon. ${accusedNames(trial)} ${isGroup(trial) ? "sont accusés" : "est accusé"} de « ${trial.crime} » par ${trial.plaintiff.name}. Défense : ${trial.lawyer?.name ?? "aucune, débrouille-toi"}. Procès ${STYLE_TEXT[trial.style]}, jugé ${MODE_TEXT[trial.mode]}. On plaide de vive voix, quand la cour donne la parole.`,
   ),

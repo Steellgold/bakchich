@@ -95,6 +95,9 @@ export const SIDE_DOOR: Vec2 = {
 export const WINDOW_ZS = [5, 17, 25];
 export const WINDOW_HALF_OPENING = 0.6;
 
+/** Height of the ceiling and of the wall tops (the Blockbench wall pieces are 4 m, a second row is stacked on them) */
+export const CEILING_HEIGHT = 8;
+
 const box = (minX: number, minZ: number, maxX: number, maxZ: number, height: number, kind: Box["kind"]): Box => ({
   min: {
     x: minX,
@@ -118,10 +121,10 @@ const BENCH_DEPTH = 0.6;
 
 export const OBSTACLES: Box[] = [
   // Walls:
-  box(-HALF_WIDTH - 0.5, -0.5, HALF_WIDTH + 0.5, 0, 4, "wall"),
-  box(-HALF_WIDTH - 0.5, DEPTH, HALF_WIDTH + 0.5, DEPTH + 0.5, 4, "wall"),
-  box(-HALF_WIDTH - 0.5, 0, -HALF_WIDTH, DEPTH, 4, "wall"),
-  box(HALF_WIDTH, 0, HALF_WIDTH + 0.5, DEPTH, 4, "wall"),
+  box(-HALF_WIDTH - 0.5, -0.5, HALF_WIDTH + 0.5, 0, CEILING_HEIGHT, "wall"),
+  box(-HALF_WIDTH - 0.5, DEPTH, HALF_WIDTH + 0.5, DEPTH + 0.5, CEILING_HEIGHT, "wall"),
+  box(-HALF_WIDTH - 0.5, 0, -HALF_WIDTH, DEPTH, CEILING_HEIGHT, "wall"),
+  box(HALF_WIDTH, 0, HALF_WIDTH + 0.5, DEPTH, CEILING_HEIGHT, "wall"),
   // Judge stand, clerk desk and witness stand:
   box(-3, 1, 3, 3, 1.5, "stand"),
   box(-8, 1, -5, 2.5, 1, "desk"),

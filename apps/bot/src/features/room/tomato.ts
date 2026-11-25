@@ -1,6 +1,6 @@
 // Ballistic flight of a free-aimed tomato, simulated by the room server and previewed by the client (relative imports only, shared with apps/web).
 import type { Vec2 } from "./layout";
-import { OBSTACLES, PLAYER_RADIUS } from "./layout";
+import { CEILING_HEIGHT, OBSTACLES, PLAYER_RADIUS } from "./layout";
 
 export type Vec3 = {
   x: number;
@@ -25,7 +25,7 @@ export const TOMATO_MAX_S = 3;
 export const TOMATO_CHARGE_S = 1.2;
 const MIN_SPEED = 6;
 const MAX_SPEED = 15;
-const CEILING = 4;
+const CEILING = CEILING_HEIGHT;
 /** Hit zone of a player: a vertical cylinder, a bit wider than their collision radius, head included */
 const BODY_RADIUS = PLAYER_RADIUS + 0.1;
 const BODY_HEIGHT = 1.9;

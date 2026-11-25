@@ -22,6 +22,7 @@ export const HELPLINES: Record<Danger, string> = {
 };
 
 export const DOZING = "Hm ? Pardon, je somnolais. Si tu veux un procès, dis-moi juste qui et pourquoi.";
+export const DISTRESS_FALLBACK = "Je t'ai entendu, et ça compte. Ce que tu traverses est sérieux : tu n'as pas à le porter seul. Parles-en à quelqu'un de confiance ou à un médecin, et si tu veux écrire ici, je t'écoute.";
 export const DEPRESSION_JOKE = `RIEN A FOUTRE DE TA DEPRESSION ${EMOJI.tiboRaf}`;
 
 // Besides trials, the judge is who the Royaume asks about law and ethics: funny in the form, right in the substance.

@@ -2,7 +2,7 @@
 import type { Vec2 } from "./layout";
 import type { ServerMessage } from "./protocol";
 import type { PlayerState } from "./world";
-import { PLAYER_RADIUS, ROOM, WINDOW_HALF_OPENING, WINDOW_ZS } from "./layout";
+import { CEILING_HEIGHT, PLAYER_RADIUS, ROOM, WINDOW_HALF_OPENING, WINDOW_ZS } from "./layout";
 import { canStand } from "./world";
 
 export const DIVE_MS = 500;
@@ -15,8 +15,8 @@ export const HERO_MS = 1_300;
 export const PORTAL_OPEN_MS = 1_500;
 export const COOLDOWN_MS = 20_000;
 /** Height of the portal in the ceiling, and of the feet of a member starting to fall out of it */
-export const PORTAL_HEIGHT = 3.95;
-export const FALL_HEIGHT = 3.8;
+export const PORTAL_HEIGHT = CEILING_HEIGHT - 0.05;
+export const FALL_HEIGHT = CEILING_HEIGHT - 0.2;
 
 const WALL_X = ROOM.width / 2 - PLAYER_RADIUS;
 /** Running at the wall: its x within this of the clamped position, facing it by at least this share of the heading */

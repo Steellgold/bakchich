@@ -1,5 +1,5 @@
 import type { Member, Trial } from "#/features/court/engine";
-import { AI_LAWYER, formatNames } from "#/features/court/engine";
+import { AI_LAWYER, formatNames, isTest } from "#/features/court/engine";
 import { tableIncident } from "#/tables/incident";
 import { tableTranscriptLine } from "#/tables/transcript-line";
 import { tableTrial } from "#/tables/trial";
@@ -37,8 +37,25 @@ export const roleOf = (trial: Trial, speakerId: string): string => {
   return "public";
 };
 
+/** The transcript of the test trials in progress: kept in memory only, never in the database */
+const testTranscripts = new Map<string, TranscriptLine[]>();
+
+/** A test trial is over: its transcript goes away with it */
+export const forgetTestTranscript = (trialId: string): void => {
+  testTranscripts.delete(trialId);
+};
+
 /** The clerk types a line of the hearing (text only) */
 export const recordLine = async (trial: Trial, speaker: Member, text: string): Promise<void> => {
+  if (isTest(trial)) {
+    testTranscripts.set(trial.id, [...(testTranscripts.get(trial.id) ?? []), {
+      speakerName: speaker.name,
+      role: roleOf(trial, speaker.id),
+      text,
+    }]);
+    return;
+  }
+
   await postgres.insert(tableTranscriptLine).values({
     trialId: trial.id,
     speakerId: speaker.id,
@@ -48,7 +65,7 @@ export const recordLine = async (trial: Trial, speaker: Member, text: string): P
   });
 };
 
-export const fetchTranscript = async (trialId: string): Promise<TranscriptLine[]> => postgres
+export const fetchTranscript = async (trialId: string): Promise<TranscriptLine[]> => testTranscripts.get(trialId) ?? postgres
   .select({
     speakerName: tableTranscriptLine.speakerName,
     role: tableTranscriptLine.role,

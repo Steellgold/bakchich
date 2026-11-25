@@ -7,7 +7,7 @@ import { Furniture } from "./furniture";
 import { tilePlaneTexture, useCourtroomTextures } from "./textures";
 import { isNotTiny, ToonModel } from "./toon-model";
 import { useFrame } from "@react-three/fiber";
-import { ENTRANCE, GATE, RESTRICTED_ZONE, ROOM, SIDE_DOOR, WINDOW_ZS } from "@tribunal/bot/room/layout";
+import { CEILING_HEIGHT, ENTRANCE, GATE, RESTRICTED_ZONE, ROOM, SIDE_DOOR, WINDOW_ZS } from "@tribunal/bot/room/layout";
 import { Suspense, useRef } from "react";
 
 const model = (name: string) => `/models/${name}.gltf`;
@@ -23,6 +23,8 @@ const SHELL = {
 
 /** Width of a wall section: every wall piece is 2 m wide */
 const SECTION = 2;
+/** Height of the Blockbench wall pieces, the second row of panels starts there */
+const WALL_PIECE_HEIGHT = 4;
 /** A broken pane is back after this long */
 const PANE_RESTORE_MS = 6_000;
 const BEAM_ZS = [4, 10, 16, 22, 28];
@@ -110,6 +112,18 @@ const Walls = ({ doorOpen, sideDoorOpen, windowBreaks }: {
         <SideSection key={`right:${String(z)}`} window={WINDOW_ZS.includes(z)} brokenAt={brokenAt(1, z)} position={[half, 0, z]} rotation-y={Math.PI / 2} />
       ))}
       <Door name="door_side" leaves={{ leaf_left: 1, leaf_right: -1 }} open={sideDoorOpen} position={[SIDE_DOOR.x, 0, SIDE_DOOR.z]} rotation-y={Math.PI / 2} />
+      {/* Second row of plain panels stacked on the 4 m pieces, up to the ceiling (also over the windows and doors) */}
+      <group position-y={WALL_PIECE_HEIGHT}>
+        {columns.map((x) => (
+          <ToonModel key={`judge:${String(x)}`} url={model("wall_panel")} position={[x, 0, 0]} rotation-y={Math.PI} {...SHELL} />
+        ))}
+        {[...entranceColumns, ENTRANCE.x].map((x) => (
+          <ToonModel key={`entrance:${String(x)}`} url={model("wall_panel")} position={[x, 0, ROOM.depth]} scale-x={x === ENTRANCE.x ? 1 : narrow} {...SHELL} />
+        ))}
+        {rows.flatMap((z) => [-1, 1].map((side) => (
+          <ToonModel key={`${String(side)}:${String(z)}`} url={model("wall_panel")} position={[side * half, 0, z]} rotation-y={(side * Math.PI) / 2} {...SHELL} />
+        )))}
+      </group>
     </group>
   );
 };
@@ -117,15 +131,15 @@ const Walls = ({ doorOpen, sideDoorOpen, windowBreaks }: {
 /** Plaster ceiling with beams and hanging lamps (the lamps hang between the beams), and the crooked seal above the judge */
 const Ceiling = () => (
   <group>
-    <mesh position={[0, 4, ROOM.depth / 2]} rotation-x={Math.PI / 2} receiveShadow>
+    <mesh position={[0, CEILING_HEIGHT, ROOM.depth / 2]} rotation-x={Math.PI / 2} receiveShadow>
       <planeGeometry args={[ROOM.width, ROOM.depth]} onUpdate={tilePlaneTexture} />
       <meshToonMaterial color="#fff4d6" />
     </mesh>
     {BEAM_ZS.map((z) => (
       <group key={z}>
-        <ToonModel url={model("ceiling_beam")} position={[0, 4, z]} {...SHELL} />
+        <ToonModel url={model("ceiling_beam")} position={[0, CEILING_HEIGHT, z]} {...SHELL} />
         {LAMP_XS.map((x) => (
-          <ToonModel key={x} url={model("lamp")} position={[x, 4, z + LAMP_Z_OFFSET]} {...SHELL} />
+          <ToonModel key={x} url={model("lamp")} position={[x, CEILING_HEIGHT, z + LAMP_Z_OFFSET]} {...SHELL} />
         ))}
       </group>
     ))}

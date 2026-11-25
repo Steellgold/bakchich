@@ -6,7 +6,8 @@ import { trigger } from "#/utils/trigger";
 import { desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 
 /** A member's file is rewritten once this many new lines were heard or read */
-const LINES_PER_UPDATE = 25;
+// ponytail: low threshold so a new bot gets notes early, at the cost of more AI calls; raise it once the server is busy
+const LINES_PER_UPDATE = 5;
 /** Lines kept while waiting for an update (the oldest go first) */
 const MAX_BUFFERED_LINES = 60;
 const MAX_LINE_LENGTH = 300;
