@@ -1,8 +1,48 @@
 // Motion constants of the characters: the jump, the window jump, following remote players and the stride.
+import { CEILING_MARGIN, CROUCH_S, FLIP_MS, HOP_MS, LEAP_S } from "@tribunal/bot/room/double-jump";
+import { CEILING_HEIGHT } from "@tribunal/bot/room/layout";
 import { DIVE_MS, FALL_MS } from "@tribunal/bot/room/window-jump";
 
-const JUMP_MS = 600;
+const JUMP_MS = HOP_MS;
 const JUMP_HEIGHT = 0.7;
+
+/** Height of the hips of a standing character, the pivot of the flips; `hip` is the height of that pivot, `pitch` the forward rotation around it (PI: upside down) */
+export const HIP = 0.9;
+const CEILING_HIP = CEILING_HEIGHT - CEILING_MARGIN - HIP;
+/** Seconds to drop from the ceiling to the floor, and to turn feet down again */
+export const DROP_S = 1;
+const TURN_S = 0.5;
+export type Pose = { hip: number; pitch: number };
+
+const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
+const ease = (value: number) => value * value * (3 - 2 * value);
+
+/** Leap to the ceiling (`on`: crouch, then rise while turning over) or drop from it, `age` seconds after the change, starting from the pose the member was in */
+export const ceilingPose = (on: boolean, age: number, from: Pose): Pose & { crouch: boolean } => {
+  if (on) {
+    const rise = ease(clamp01((age - CROUCH_S) / LEAP_S));
+    return {
+      hip: from.hip + (CEILING_HIP - from.hip) * rise,
+      pitch: from.pitch + (Math.PI - from.pitch) * rise,
+      crouch: age < CROUCH_S,
+    };
+  }
+
+  return {
+    hip: HIP + (from.hip - HIP) * (1 - clamp01(age / DROP_S) ** 2),
+    pitch: from.pitch + (2 * Math.PI - from.pitch) * ease(clamp01(age / TURN_S)),
+    crouch: false,
+  };
+};
+
+/** Apex double jump, `age` seconds in: flips over, falls head first, then turns feet down just before the hero landing */
+export const flipPose = (age: number): Pose => {
+  const progress = clamp01((age * 1_000) / FLIP_MS);
+  return {
+    hip: HIP + 0.7 * (1 - progress ** 2) + Math.sin(Math.PI * progress),
+    pitch: Math.PI * ease(clamp01(progress / 0.5)) + Math.PI * ease(clamp01((progress - 0.75) / 0.25)),
+  };
+};
 
 /** Height of a jump started at `jumpAt` (Date.now()), a simple arc, 0 when it is over */
 export const jumpHeight = (jumpAt: number): number => {

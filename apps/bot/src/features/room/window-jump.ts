@@ -2,6 +2,7 @@
 import type { Vec2 } from "./layout";
 import type { ServerMessage } from "./protocol";
 import type { PlayerState } from "./world";
+import { FLIP_MS } from "./double-jump";
 import { CEILING_HEIGHT, PLAYER_RADIUS, ROOM, WINDOW_HALF_OPENING, WINDOW_ZS } from "./layout";
 import { canStand } from "./world";
 
@@ -90,6 +91,16 @@ export class WindowJumps {
     };
   }
 
+  /** Double jump at the apex: a head-first flip, then the hero landing (no portal, no cooldown of the window jump) */
+  public flip(player: PlayerState, now: number): void {
+    player.air = "flip";
+    this.jumps.set(player.id, {
+      startedAt: now,
+      phaseAt: now,
+      held: true,
+    });
+  }
+
   public hold(id: string, held: boolean): void {
     const jump = this.jumps.get(id);
     if (jump !== undefined) jump.held = held;
@@ -141,7 +152,7 @@ export class WindowJumps {
           z: player.position.z,
         }, { type: "shake" });
       }
-      else if (player.air === "fall" && phaseMs >= FALL_MS) {
+      else if ((player.air === "fall" && phaseMs >= FALL_MS) || (player.air === "flip" && phaseMs >= FLIP_MS)) {
         player.air = landingKind(jump.held);
         if (player.air === "hero") player.hero = true;
         jump.phaseAt = now;

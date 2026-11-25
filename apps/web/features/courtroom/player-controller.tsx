@@ -1,15 +1,18 @@
 "use client";
 
+import type { CeilingState } from "./ceiling-roll";
 import type { AimState } from "./chaos/aim-preview";
 import type { Vec2 } from "@tribunal/bot/room/layout";
 import type { ClientMessage, TrialView } from "@tribunal/bot/room/protocol";
 import type { PlayerState } from "@tribunal/bot/room/world";
 import type { RefObject } from "react";
+import { applyCeilingRoll } from "./ceiling-roll";
 import { TUNNEL } from "./chaos/tunnel";
 import { Character } from "./character/character";
+import { lookSensitivity } from "./look-sensitivity";
+import { KEYS, SELF_KEYS, TARGET_KEYS, TARGET_RANGE } from "./player-keys";
 import { isBenchSeat, seatElevation } from "./seats";
 import { useFrame, useThree } from "@react-three/fiber";
-import { CHAOS_REACH } from "@tribunal/bot/room/chaos";
 import { ARCHIVES, ARCHIVES_RADIUS, GATE, GATE_RADIUS, MAX_SPEED, ROOM, RUN_SPEED, TICK_MS } from "@tribunal/bot/room/layout";
 import { tomatoSpeed, TOMATO_CHARGE_S } from "@tribunal/bot/room/tomato";
 import { nearbyBenchSeat, SEAT_REACH, seatForRole, slide, SUITS } from "@tribunal/bot/room/world";
@@ -25,15 +28,6 @@ const CAMERA_LIMIT_X = ROOM.width / 2 - CAMERA_MARGIN;
 // The camera stays inside the walls, otherwise it ends up behind one and only sees its outer face:
 const clampX = (x: number) => Math.max(-CAMERA_LIMIT_X, Math.min(CAMERA_LIMIT_X, x));
 const clampZ = (z: number) => Math.max(CAMERA_MARGIN, Math.min(ROOM.depth - CAMERA_MARGIN, z));
-
-// ZQSD (AZERTY) and WASD (QWERTY) both move:
-const KEYS = {
-  forward: ["KeyW"],
-  backward: ["KeyS"],
-  left: ["KeyA"],
-  right: ["KeyD"],
-  run: ["ShiftLeft", "ShiftRight"],
-};
 
 export type NearbyInteraction = "become-juror" | "sit-on-bench" | "sit-down" | "open-archives" | null;
 
@@ -51,34 +45,6 @@ const SHAKE_AMPLITUDE = 0.14;
 
 /** Tomato in hand: nothing in hand, tomato in hand, or aiming with the right mouse button */
 export type Aim = "none" | "holding" | "aiming";
-
-/** Chaos keys of the audience on the member you look at (the tomato, key 1, is free-aimed: see the aim code below) */
-const TARGET_KEYS: Record<string, (targetId: string) => ClientMessage> = {
-  Digit2: (targetId) => ({
-    type: "whisper",
-    targetId,
-  }),
-  Digit3: (targetId) => ({
-    type: "challenge",
-    targetId,
-    game: "rps",
-  }),
-  Digit4: (targetId) => ({
-    type: "challenge",
-    targetId,
-    game: "connect4",
-  }),
-  Digit5: (targetId) => ({
-    type: "fight",
-    targetId,
-  }),
-};
-const SELF_KEYS: Record<string, ClientMessage> = {
-  KeyO: { type: "shout-objection" },
-  KeyB: { type: "toggle-sleep" },
-};
-/** The chaos bar only shows up next to someone (the server still lets a tomato fly a bit further, for latency) */
-export const TARGET_RANGE = CHAOS_REACH;
 
 type PlayerControllerProps = {
   self: PlayerState;
@@ -154,7 +120,13 @@ export const PlayerController
     const suitRef = useRef(self.suit);
     suitRef.current = self.suit;
     // The audience makes chaos; parties and jurors in their box do not:
-    const canMakeChaos = !inGame && self.role === null && self.seatId?.startsWith("jury-") !== true && self.air === null;
+    const canMakeChaos = !inGame && self.role === null && self.seatId?.startsWith("jury-") !== true && self.air === null && !self.ceiling;
+    // Ceiling walk: the camera rolls (0 to 1 of a half turn) once the leap has reached the ceiling; upside down, left and right swap on screen
+    const ceilingRef = useRef<CeilingState>({
+      on: self.ceiling,
+      at: 0,
+    });
+    const rollRef = useRef(self.ceiling ? 1 : 0);
 
     // An authoritative seat change or a window jump can move the player even when the correction is small.
     const seatChanged = previousSeatRef.current !== self.seatId;
@@ -222,8 +194,8 @@ export const PlayerController
         if (inGame) return;
         const aiming = aimModeRef.current === "aiming";
 
-        if (document.pointerLockElement === canvas || event.buttons === 1 || aiming) yawRef.current -= event.movementX * 0.005;
-        if (aiming) pitchRef.current = Math.min(AIM_PITCH_MAX, Math.max(AIM_PITCH_MIN, pitchRef.current - event.movementY * 0.004));
+        if (document.pointerLockElement === canvas || event.buttons === 1 || aiming) yawRef.current -= event.movementX * 0.005 * lookSensitivity.value * (rollRef.current > 0.5 ? -1 : 1);
+        if (aiming) pitchRef.current = Math.min(AIM_PITCH_MAX, Math.max(AIM_PITCH_MIN, pitchRef.current - event.movementY * 0.004 * lookSensitivity.value));
       };
       // With a tomato in hand: right button held aims (and charges), left click throws.
       const press = (event: MouseEvent) => {
@@ -294,7 +266,8 @@ export const PlayerController
       if (inGame) return;
       const isDown = (codes: string[]) => codes.some((code) => pressedRef.current.has(code));
       const forward = Number(isDown(KEYS.forward)) - Number(isDown(KEYS.backward));
-      const strafe = Number(isDown(KEYS.right)) - Number(isDown(KEYS.left));
+      const inverted = rollRef.current > 0.5;
+      const strafe = (Number(isDown(KEYS.right)) - Number(isDown(KEYS.left))) * (inverted ? -1 : 1);
       const running = isDown(KEYS.run);
       const holding = self.air !== null && pressedRef.current.has("Space");
 
@@ -336,7 +309,7 @@ export const PlayerController
 
       let interaction: NearbyInteraction = null;
 
-      if (self.seatId === null) {
+      if (self.seatId === null && !self.ceiling) {
         const position = predictedRef.current;
         const nearGate = Math.hypot(position.x - GATE.x, position.z - GATE.z) <= GATE_RADIUS;
         const ownSeat = self.role === null ? undefined : seatForRole(self.role, trial, self.id);
@@ -426,6 +399,8 @@ export const PlayerController
         camera.lookAt(position.x + (eyeX + direction.x * 10 - position.x) * blend, 1.2 + (AIM_HEIGHT + direction.y * 10 - 1.2) * blend, position.z + (eyeZ + direction.z * 10 - position.z) * blend);
       }
 
+      applyCeilingRoll(camera, ceilingRef, rollRef, self.ceiling, delta);
+
       // The jumper sees the tunnel (far above the room) while away, and everybody's camera shakes when the portal opens:
       if (self.air === "away") {
         camera.position.set(TUNNEL.x, TUNNEL.y + 1.6, TUNNEL.z + 3.2);
@@ -473,6 +448,7 @@ export const PlayerController
         air={self.air}
         suit={self.suit}
         hero={self.hero}
+        ceiling={self.ceiling}
       />
     );
   };

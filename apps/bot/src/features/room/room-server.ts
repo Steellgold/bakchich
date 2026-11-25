@@ -11,6 +11,7 @@ import { listKnownMembers, upsertMember } from "#/features/court/members";
 import { isInHearingVoice } from "#/features/hearings/hearings";
 import { listFiles } from "#/features/profiles/profiles";
 import { authorizeConnection } from "#/features/room/access";
+import { doubleJump } from "#/features/room/double-jump";
 import { ARCHIVES, ARCHIVES_RADIUS, MAX_SPEED, RUN_SPEED, SEATS, TICK_MS } from "#/features/room/layout";
 import { parseClientMessage } from "#/features/room/protocol";
 import { createRoomChaos } from "#/features/room/room-chaos";
@@ -202,6 +203,24 @@ const jump = (id: string) => {
   });
 };
 
+/** Space of a hero: leap to the ceiling, flip at the apex of a hop, or let go of the ceiling; false when it is an ordinary jump */
+const lastDoubles = new Map<string, number>();
+
+const doubleJumpOf = (id: string): boolean => {
+  const player = world.player(id);
+  const now = Date.now();
+  const kind = player === undefined || chaos.isBusy(id) ? null : doubleJump(player, now - (lastJumps.get(id) ?? 0), now - (lastDoubles.get(id) ?? 0));
+
+  if (player === undefined || kind === null) return false;
+
+  lastDoubles.set(id, now);
+  chaos.wake(id);
+  if (kind === "apex") windowJumps.flip(player, now);
+  else player.ceiling = kind === "ceiling";
+
+  return true;
+};
+
 /** A member at the archive cabinet reads the clerk's files */
 const openArchives = trigger.safeListener("Archives", async (id: string, socket: WebSocket) => {
   const position = world.player(id)?.position;
@@ -236,6 +255,8 @@ const handleMessage = (member: RoomMember, socket: WebSocket, raw: string) => {
   // Diving, away, falling or landing: the member only waits for the end of the jump.
   if (world.player(member.id)?.air !== null) return;
   if (world.isPlaying(member.id) && !["rps-pick", "connect4-drop", "game-hover", "quit-game", "vote"].includes(message.type)) return;
+  // Upside down on the ceiling: walking and letting go are all there is.
+  if (world.player(member.id)?.ceiling === true && !["move", "jump", "vote"].includes(message.type)) return;
 
   if (message.type === "move") {
     // Fighters are held until the police comes; walking wakes a sleeper up.
@@ -265,7 +286,7 @@ const handleMessage = (member: RoomMember, socket: WebSocket, raw: string) => {
 
     // Running into a window opening: dive through it.
     const runner = world.player(member.id);
-    const dive = message.running === true && runner !== undefined && !chaos.isBusy(member.id) ? windowJumps.start(runner, now) : null;
+    const dive = message.running === true && runner !== undefined && !runner.ceiling && !chaos.isBusy(member.id) ? windowJumps.start(runner, now) : null;
     if (dive !== null) broadcast(dive);
     return;
   }
@@ -290,7 +311,7 @@ const handleMessage = (member: RoomMember, socket: WebSocket, raw: string) => {
     return;
   }
   if (message.type === "jump") {
-    jump(member.id);
+    if (!doubleJumpOf(member.id)) jump(member.id);
     return;
   }
   if (message.type === "vote") {

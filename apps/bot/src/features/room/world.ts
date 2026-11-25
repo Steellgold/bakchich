@@ -4,8 +4,8 @@ import { GATE, GATE_RADIUS, OBSTACLES, PLAYER_RADIUS, ROOM, SEATS } from "./layo
 
 export type Role = "accused" | "prosecutor" | "defense" | "witness";
 
-/** Where a member is in a window jump: diving out, away outside, falling out of the portal, or landing (belly flop or superhero) */
-export type Air = "dive" | "away" | "fall" | "flop" | "hero";
+/** Where a member is in a window jump: diving out, away outside, falling out of the portal, or landing (belly flop or superhero); "flip" is the head-first fall of a double jump at the apex, ending in the hero landing */
+export type Air = "dive" | "away" | "fall" | "flop" | "hero" | "flip";
 
 /** Spider-Man suits worn for the hero landing, chosen with Tab (the server only stores and broadcasts the choice) */
 export const SUITS = ["red", "black", "venom"] as const;
@@ -23,6 +23,8 @@ export type PlayerState = {
   suit: Suit;
   /** In the Spider-Man form (set by the hero landing) until the member leaves: the suit is worn and the web replaces the tomato */
   hero: boolean;
+  /** Stuck to the ceiling by a double jump (hero only): walks there upside down until released */
+  ceiling: boolean;
 };
 
 const ROLE_SEATS: Record<"prosecutor" | "defense" | "witness", Seat> = {
@@ -131,6 +133,7 @@ export class World {
       air: null,
       suit: "red",
       hero: false,
+      ceiling: false,
     };
     this.states.set(player.id, state);
     this.assignRole(state);
@@ -238,6 +241,7 @@ export class World {
     const state = this.states.get(id);
     if (state === undefined) return;
     state.seatId = null;
+    state.ceiling = false;
     state.position = { ...position };
     state.rotation = rotation;
     this.gameLocks.add(id);
@@ -281,6 +285,7 @@ export class World {
     if (state === undefined) return;
 
     state.seatId = null;
+    state.ceiling = false;
     state.position = { ...ROOM.spawn };
     state.rotation = Math.PI;
   }
@@ -325,6 +330,7 @@ export class World {
 
   private sit(state: PlayerState, seat: Seat): void {
     state.seatId = seat.id;
+    state.ceiling = false;
     state.position = { ...seat.position };
     state.rotation = seat.rotation;
   }

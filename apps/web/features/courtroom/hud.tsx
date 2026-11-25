@@ -2,7 +2,7 @@
 
 import type { Aim, NearbyInteraction } from "./player-controller";
 import type { Toast } from "@/features/courtroom/use-room-socket";
-import type { Floor, Mode, Phase, Style, VoteResult } from "@tribunal/bot/court/engine";
+import type { Phase, VoteResult } from "@tribunal/bot/court/engine";
 import type { Challenge, GameView, RoomGame } from "@tribunal/bot/room/chaos";
 import type { ArchiveFile, ClientMessage, TrialView } from "@tribunal/bot/room/protocol";
 import type { PlayerState, Role } from "@tribunal/bot/room/world";
@@ -34,16 +34,6 @@ const PHASE_LABELS: Record<Phase, string> = {
   "deliberation": "Délibéré",
 };
 
-const MODE_LABELS: Record<Mode, string> = {
-  jury: "Jury populaire",
-  bench: "Juge seul",
-  assizes: "Assises",
-};
-const STYLE_LABELS: Record<Style, string> = {
-  american: "À l'américaine",
-  french: "À la française",
-};
-
 /** Below this, the timer turns red and pulses */
 const HURRY_MS = 30_000;
 
@@ -53,17 +43,6 @@ const joinNames = (names: string[]) => (names.length <= 1 ? (names[0] ?? "") : `
 const formatCountdown = (remainingMs: number) => {
   const seconds = Math.max(0, Math.round(remainingMs / 1_000));
   return `${String(Math.floor(seconds / 60))}:${String(seconds % 60).padStart(2, "0")}`;
-};
-
-/** Who has the floor, by name */
-const floorName = (trial: TrialView, floor: Floor): string | null => {
-  if (floor === "judge") return "le juge";
-  if (floor === "accused") return joinNames(trial.accused.map((member) => member.name));
-  if (floor === "prosecution") return trial.plaintiff.name;
-  if (floor === "defense") return trial.lawyer?.name ?? joinNames(trial.accused.map((member) => member.name));
-  if (floor === "witness") return trial.witness?.name ?? null;
-
-  return null;
 };
 
 type HudProps = {
@@ -121,7 +100,6 @@ export const Hud
     const remaining = trial === null ? 0 : trial.endsAt - now;
     // The highlighted choice is the last one the court accepted:
     const accepted = voteResult === "ok" ? guilty : null;
-    const floor = trial === null ? null : floorName(trial, trial.floor);
     const canMakeChaos = roomGame === null && role === null && seatId?.startsWith("jury-") !== true;
 
     return (
@@ -135,8 +113,6 @@ export const Hud
             {trial !== null && (
               <>
                 <h2 className="case-title">{`Le peuple contre ${joinNames(trial.accused.map((member) => member.name))}`}</h2>
-                <p className="case-crime">{`« ${trial.crime} »`}</p>
-                <p className="case-floor">{`${STYLE_LABELS[trial.style]} · ${MODE_LABELS[trial.mode]}${floor === null ? "" : ` · La parole : ${floor}`}`}</p>
                 <ul className="case-people">
                   <li>
                     <span className="case-label">Plaignant</span>
@@ -146,12 +122,6 @@ export const Hud
                     <li>
                       <span className="case-label">Avocat</span>
                       {trial.lawyer.name}
-                    </li>
-                  )}
-                  {trial.witness !== null && (
-                    <li>
-                      <span className="case-label">À la barre</span>
-                      {trial.witness.name}
                     </li>
                   )}
                 </ul>

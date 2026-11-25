@@ -6,18 +6,22 @@ import type { RoomGame } from "@tribunal/bot/room/chaos";
 import type { Vec2 } from "@tribunal/bot/room/layout";
 import type { Air, Suit } from "@tribunal/bot/room/world";
 import type { Group } from "three";
-import { EmojiText } from "../emoji-text";
 import { animateGame } from "./game-motion";
-import { diveDistance, EXTRAPOLATE_SECONDS, fallHeight, FOLLOW_RATE, jumpHeight, STALE_SECONDS, STRIDE_PER_METER, TURN_RATE } from "./gestures";
+import { ceilingPose, diveDistance, DROP_S, EXTRAPOLATE_SECONDS, fallHeight, flipPose, FOLLOW_RATE, HIP, jumpHeight, STALE_SECONDS, STRIDE_PER_METER, TURN_RATE } from "./gestures";
 import { memberLook } from "./looks";
 import { CharacterModel, modelBaseY } from "./model";
 import { animateTalk, animateTyping, driveClips } from "./motion";
 import { useAvatarTexture } from "./parts";
 import { Html } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
+import { CROUCH_S } from "@tribunal/bot/room/double-jump";
 import { MAX_SPEED } from "@tribunal/bot/room/layout";
 import { FALL_HEIGHT } from "@tribunal/bot/room/window-jump";
 import { Suspense, useMemo, useRef } from "react";
+
+const GROW_SECONDS = 1;
+const VENOM_SCALE = 1.25;
+const VENOM_ARM_SCALE = 1.3;
 
 type CharacterProps = {
   id: string;
@@ -53,6 +57,8 @@ type CharacterProps = {
   suit?: Suit;
   /** In the Spider-Man form (from the hero landing until the member leaves) */
   hero?: boolean;
+  /** Walking upside down on the ceiling (double jump of the Spider-Man form) */
+  ceiling?: boolean;
   /** Height the fall starts from (the tunnel of the jumper falls without losing height) */
   fallFrom?: number;
   /** The clerk typing on his keyboard */
@@ -67,7 +73,7 @@ type CharacterProps = {
 
 /** A member with a stable look from their ID, or a court officer (judge, police, clerk), each one a Blockbench model. */
 export const Character
-  = ({ id, name, avatarUrl, position, rotation, seated, onBench = false, speech, elevation = 0, speaking = false, level = 0, variant = "member", sleeping = false, leanSide = 0, splat = false, fighting = false, game = null, jumpAt = 0, air = null, suit = "red", hero = false, fallFrom = FALL_HEIGHT, typing = false, interpolate = false, follow }: CharacterProps) => {
+  = ({ id, name, avatarUrl, position, rotation, seated, onBench = false, elevation = 0, speaking = false, level = 0, variant = "member", sleeping = false, leanSide = 0, splat = false, fighting = false, game = null, jumpAt = 0, air = null, suit = "red", hero = false, ceiling = false, fallFrom = FALL_HEIGHT, typing = false, interpolate = false, follow }: CharacterProps) => {
     const groupRef = useRef<Group>(null);
     const modelRef = useRef<Rig>(null);
     const motionRef = useRef({
@@ -85,10 +91,24 @@ export const Character
       run: 0,
       talk: 0,
       loud: 0,
+      /** 0 to 1: how far the Venom growth has gone (no growth on the first landing as Venom) */
+      grow: hero && suit === "venom" ? 1 : 0,
     });
     const airRef = useRef<{ air: Air | null; since: number }>({
       air,
       since: -1,
+    });
+    // Ceiling leap and drop: the pose (hips height and pitch around them) the character is in, and where it started from at the last change
+    const flipRef = useRef<Group>(null);
+    const ceilingRef = useRef({
+      on: ceiling,
+      since: -100,
+      hip: HIP,
+      pitch: 0,
+      from: {
+        hip: HIP,
+        pitch: 0,
+      },
     });
     const texture = useAvatarTexture(avatarUrl);
     const look = useMemo(() => (variant === "member" ? memberLook(id) : undefined), [id, variant]);
@@ -164,14 +184,36 @@ export const Character
       motion.phase += moved * STRIDE_PER_METER;
       motion.walk += ((walking ? 1 : 0) - motion.walk) * (1 - Math.exp(-delta * 10));
       motion.run += ((walking && speed > MAX_SPEED + 0.5 ? 1 : 0) - motion.run) * (1 - Math.exp(-delta * 8));
-      current.position.y
-        = baseY
-          + Math.abs(Math.sin(motion.phase)) * (0.045 + motion.run * 0.07) * motion.walk
-          + (fighting ? Math.abs(Math.sin(time * 9)) * 0.06 : 0)
-          + jumpHeight(jumpAt)
-          + (air === "fall" ? fallHeight(airAge, fallFrom) : 0);
+      // Ceiling leap, ceiling walk and drop, or the apex flip: the body turns around its hips (the flip group) instead of its feet.
+      const ceil = ceilingRef.current;
+
+      if (ceil.on !== ceiling) {
+        ceil.on = ceiling;
+        ceil.since = time;
+        ceil.from = {
+          hip: ceil.hip,
+          pitch: ceil.pitch,
+        };
+      }
+
+      const ceilAge = time - ceil.since;
+      const pose = air === "flip" ? flipPose(airAge) : ceiling || ceilAge < DROP_S ? ceilingPose(ceiling, ceilAge, ceil.from) : null;
+      ceil.hip = pose?.hip ?? HIP;
+      ceil.pitch = pose?.pitch ?? 0;
+      flipRef.current?.rotation.set(ceil.pitch, 0, 0);
+      current.position.y = pose === null ? baseY
+      + Math.abs(Math.sin(motion.phase)) * (0.045 + motion.run * 0.07) * motion.walk
+      + (fighting ? Math.abs(Math.sin(time * 9)) * 0.06 : 0)
+      + jumpHeight(jumpAt)
+      + (air === "fall" ? fallHeight(airAge, fallFrom) : 0) : baseY + ceil.hip - HIP;
       // The dive, flop and landing clips own the pitch of the body: no running lean then.
-      current.rotation.x = air === null ? motion.run * 0.18 : 0;
+      current.rotation.x = air === null && pose === null ? motion.run * 0.18 : 0;
+
+      // Venom grows (and shrinks back when leaving the form), the arms even more:
+      motion.grow = Math.min(1, Math.max(0, motion.grow + (hero && suit === "venom" ? delta : -delta) / GROW_SECONDS));
+
+      const eased = motion.grow * motion.grow * (3 - 2 * motion.grow);
+      current.scale.setScalar(1 + (VENOM_SCALE - 1) * eased);
 
       const rig = modelRef.current;
 
@@ -179,14 +221,19 @@ export const Character
 
       // Each frame starts from the rest pose, then the clips of the model, then the procedural layers on top:
       for (const node of [...rig.arms, ...rig.elbows, ...rig.wrists, ...rig.legs, ...rig.knees, rig.head]) node?.rotation.set(0, 0, 0);
-      for (const arm of rig.arms) if (arm !== null) arm.scale.y = 1;
-      for (const elbow of rig.elbows) if (elbow !== null) elbow.visible = true;
+      const armScale = 1 + (VENOM_ARM_SCALE - 1) * eased;
+      for (const arm of rig.arms) arm?.scale.setScalar(armScale);
+      for (const elbow of rig.elbows) {
+        elbow?.scale.setScalar(armScale);
+        if (elbow !== null) elbow.visible = true;
+      }
 
       if (rig.clips !== undefined) {
         driveClips(rig.clips, {
           walk: motion.walk,
           run: motion.run,
-          seated,
+          // The crouch before the ceiling leap reuses the sit clip
+          seated: seated || (ceiling && ceilAge < CROUCH_S),
           fighting,
           jumpAt,
           air,
@@ -235,16 +282,19 @@ export const Character
 
     return (
       <group ref={groupRef} position={[position.x, baseY, position.z]}>
-        <Suspense fallback={null}>
-          <CharacterModel kind={variant} look={look} suit={hero ? suit : null} texture={texture} splat={splat} rigRef={modelRef} />
-        </Suspense>
+        <group ref={flipRef} position={[0, HIP, 0]}>
+          <Suspense fallback={null}>
+            <group position={[0, -HIP, 0]}>
+              <CharacterModel kind={variant} look={look} suit={hero ? suit : null} texture={texture} splat={splat} rigRef={modelRef} />
+            </group>
+          </Suspense>
 
-        <Html position={[0, 2.4, 0]} center distanceFactor={10}>
-          <div className="tag">
-            {speech !== null && <div className="bubble"><EmojiText>{speech}</EmojiText></div>}
-            <div className="name">{name}</div>
-          </div>
-        </Html>
+          <Html position={[0, 2.4 - HIP, 0]} center distanceFactor={10}>
+            <div className="tag">
+              <div className="name">{name}</div>
+            </div>
+          </Html>
+        </group>
       </group>
     );
   };

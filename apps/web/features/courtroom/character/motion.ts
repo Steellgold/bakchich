@@ -29,6 +29,7 @@ export type Clips = {
 /** The clip that owns the body during a window jump, from the phase and the seconds since it began */
 const airClip = (air: Air | null, age: number): ClipName | null => {
   if (air === "dive" || air === "fall") return air;
+  if (air === "flip") return "fall";
   if (air === "flop") return age < FLOP_CLIP_S ? "flop" : "get_up";
   if (air === "hero") return age < HERO_LAND_CLIP_S ? "hero_land" : "hero_rise";
 
@@ -102,7 +103,8 @@ export const driveClips = (clips: Clips, state: {
   if (driven && state.jumpAt !== clips.jumpAt && state.jumpAt > 0) actions.jump?.reset().play();
 
   clips.jumpAt = state.jumpAt;
-  const jumping = driven && forced === null && actions.jump?.isRunning() === true;
+  // Seated (or crouching for the ceiling leap) beats a hop still playing:
+  const jumping = driven && forced === null && !state.seated && actions.jump?.isRunning() === true;
   const targets: Record<ClipName, number> = {
     idle: 0,
     walk: 0,

@@ -3,10 +3,10 @@
 import type { VoteResult } from "@tribunal/bot/court/engine";
 import type { Challenge, GameView } from "@tribunal/bot/room/chaos";
 import type { ArchiveFile, ClientMessage, ServerMessage } from "@tribunal/bot/room/protocol";
+import { subtitleDuration } from "./subtitles";
 import { CHALLENGE_MS } from "@tribunal/bot/room/chaos";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-const SPEECH_DURATION_MS = 6_000;
 const TOAST_DURATION_MS = 7_000;
 /** How long a splat stays on a wall or the floor */
 export const SPLAT_LIFE_MS = 8_000;
@@ -129,7 +129,7 @@ export const useRoomSocket = (url: string, token?: string) => {
       if (message.type === "verdict") setVerdict(message.line);
       if (message.type === "vote-result") setVoteResult(message.result);
       if (message.type === "rejected") setRejected(message.reason);
-      // Chaos: shouts and whispers show as bubbles, tomatoes fly, rumors and refusals pop up for a few seconds.
+      // Chaos: shouts and whispers show as call-outs, tomatoes fly, rumors and refusals pop up for a few seconds.
       if (message.type === "effect") {
         const at = Date.now();
         if (message.kind === "tomato" || message.kind === "web") setTomatoes((current) => [
@@ -213,10 +213,10 @@ export const useRoomSocket = (url: string, token?: string) => {
     socket.addEventListener("message", onMessage);
     socket.addEventListener("close", onClose);
 
-    // Speech bubbles fade after a few seconds:
+    // Subtitles fade after a few seconds (longer for longer lines):
     const pruner = setInterval(() => {
       const now = Date.now();
-      setSpeeches((current) => current.filter((speech) => now - speech.at < SPEECH_DURATION_MS));
+      setSpeeches((current) => current.filter((speech) => now - speech.at < subtitleDuration(speech.text)));
       setToasts((current) => (current.length === 0 ? current : current.filter((toast) => now - toast.at < TOAST_DURATION_MS)));
       setTomatoes((current) => (current.length === 0 ? current : current.filter((flight) => now - flight.at < flight.duration * 1_000 + SPLAT_LIFE_MS)));
       setCallouts((current) => (current.length === 0 ? current : current.filter((callout) => now - callout.at < CALLOUT_LIFE_MS)));

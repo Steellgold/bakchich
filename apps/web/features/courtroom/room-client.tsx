@@ -2,7 +2,6 @@
 
 import type { AimState } from "./chaos/aim-preview";
 import type { Aim, NearbyInteraction } from "./player-controller";
-import type { Speech } from "@/features/courtroom/use-room-socket";
 import type { Vec2 } from "@tribunal/bot/room/layout";
 import type { Air, PlayerState } from "@tribunal/bot/room/world";
 import { AimPreview } from "./chaos/aim-preview";
@@ -13,11 +12,14 @@ import { Tunnel } from "./chaos/tunnel";
 import { WebOverlay } from "./chaos/web-overlay";
 import { WindowJumpEffects } from "./chaos/window-jump";
 import { Character } from "./character/character";
+import { memberLook } from "./character/looks";
 import { Courtroom } from "./courtroom";
 import { Gate } from "./furniture";
 import { Hud } from "./hud";
 import { PlayerController } from "./player-controller";
 import { CLERK_SEAT, isBenchSeat, seatById, seatElevation } from "./seats";
+import { SettingsPanel } from "./settings-panel";
+import { Subtitles } from "./subtitles";
 import { GameDialog } from "@/components/game-ui";
 import { useRoomSocket } from "@/features/courtroom/use-room-socket";
 import { useProgress } from "@react-three/drei";
@@ -25,8 +27,6 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { ENTRANCE, JUDGE_NAME, MAX_SPEED, OBSTACLES, RESTRICTED_ZONE, ROOM, SEATS } from "@tribunal/bot/room/layout";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-
-const latestSpeech = (speeches: Speech[], speakerId: string | null) => speeches.findLast((speech) => speech.speakerId === speakerId)?.text ?? null;
 
 type LeavingPlayer = Pick<PlayerState, "id" | "name" | "avatarUrl" | "position">;
 
@@ -245,7 +245,7 @@ export const RoomClient = ({ url, token }: {
           position={CLERK_SEAT.position}
           rotation={CLERK_SEAT.rotation}
           seated
-          speech={latestSpeech(speeches, "clerk")}
+          speech={null}
           elevation={seatElevation(CLERK_SEAT.id)}
           variant="clerk"
           typing={snapshot?.trial !== null && snapshot?.trial !== undefined}
@@ -269,7 +269,7 @@ export const RoomClient = ({ url, token }: {
           position={SEATS.judge.position}
           rotation={SEATS.judge.rotation}
           seated
-          speech={latestSpeech(speeches, null)}
+          speech={null}
           speaking={speaking.has("judge")}
           // On the throne of the judge stand, its seat 1.5 m high:
           elevation={1.05}
@@ -292,7 +292,7 @@ export const RoomClient = ({ url, token }: {
               seated
               onBench={isBenchSeat(npc.seatId)}
               elevation={seatElevation(npc.seatId)}
-              speech={latestSpeech(speeches, npc.id)}
+              speech={null}
               speaking={speaking.has(npc.id)}
             />
           );
@@ -311,13 +311,14 @@ export const RoomClient = ({ url, token }: {
               seated={player.seatId !== null}
               onBench={isBenchSeat(player.seatId)}
               elevation={seatElevation(player.seatId)}
-              speech={latestSpeech(speeches, player.id)}
+              speech={null}
               speaking={speaking.has(player.id)}
               level={levelOf(player.id)}
               jumpAt={jumps[player.id]}
               air={player.air}
               suit={player.suit}
               hero={player.hero}
+              ceiling={player.ceiling}
               sleeping={sleeping.has(player.id)}
               leanSide={leanOf(player.id, player.position, player.rotation)}
               splat={splats.has(player.id)}
@@ -336,7 +337,7 @@ export const RoomClient = ({ url, token }: {
             self={self}
             inGame={roomGame !== null}
             trial={snapshot?.trial ?? null}
-            speech={latestSpeech(speeches, self.id)}
+            speech={null}
             speaking={speaking.has(self.id)}
             level={levelOf(self.id)}
             jumpAt={jumps[self.id] ?? 0}
@@ -360,6 +361,21 @@ export const RoomClient = ({ url, token }: {
 
       {flashAt > 0 && <div key={flashAt} className="flash" />}
       <WebOverlay flights={tomatoes} selfId={selfId} />
+      <Subtitles
+        speeches={speeches}
+        speakers={[
+          ...(snapshot?.players ?? []).map((player) => ({
+            id: player.id,
+            name: player.name,
+            color: memberLook(player.id).accent,
+          })),
+          ...(snapshot?.npcs ?? []).map((npc) => ({
+            id: npc.id,
+            name: npc.name,
+            color: memberLook(npc.id).accent,
+          })),
+        ]}
+      />
 
       <Hud
         trial={snapshot?.trial ?? null}
@@ -382,6 +398,7 @@ export const RoomClient = ({ url, token }: {
         onCloseArchives={() => setArchives(null)}
         send={send}
       />
+      <SettingsPanel />
     </div>
   );
 };

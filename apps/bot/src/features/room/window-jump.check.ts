@@ -26,6 +26,7 @@ const player: PlayerState = {
   air: null,
   suit: "red",
   hero: false,
+  ceiling: false,
 };
 const jumps = new WindowJumps();
 const tick = (now: number) => jumps.tick(now, () => player, () => []);
