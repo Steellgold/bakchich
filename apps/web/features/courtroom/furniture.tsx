@@ -46,16 +46,25 @@ const Rail = ({ box }: { box: Box }) => {
 const GATE_HINGE = 1;
 const GATE_OPEN_ANGLE = 1.75;
 
-/** The rail gate in its gap: swings open while `open` is set (a new juror comes through) */
-export const Gate = ({ open }: { open: boolean }) => {
-  const leafRef = useRef<Group>(null);
+/** A member within this distance (m) of the gate swings it open; it closes this long (s) after the last one left */
+const GATE_TRIGGER = 1.2;
+const GATE_CLOSE_DELAY = 1.5;
 
-  useFrame((_state, delta) => {
+/** The rail gate in its gap: never blocks anyone, swings open when a member walks up to it and closes shortly after */
+export const Gate = ({ players }: { players: { position: Vec2 }[] }) => {
+  const leafRef = useRef<Group>(null);
+  const playersRef = useRef(players);
+  const openUntilRef = useRef(0);
+  playersRef.current = players;
+
+  useFrame((state, delta) => {
     const leaf = leafRef.current;
 
     if (leaf === null) return;
 
-    leaf.rotation.y += ((open ? GATE_OPEN_ANGLE : 0) - leaf.rotation.y) * Math.min(1, delta * 6);
+    if (playersRef.current.some(({ position }) => Math.hypot(position.x - GATE.x, position.z - (RESTRICTED_ZONE.max.z + 0.15)) <= GATE_TRIGGER)) openUntilRef.current = state.clock.elapsedTime + GATE_CLOSE_DELAY;
+
+    leaf.rotation.y += ((state.clock.elapsedTime < openUntilRef.current ? GATE_OPEN_ANGLE : 0) - leaf.rotation.y) * Math.min(1, delta * 6);
   });
 
   return (

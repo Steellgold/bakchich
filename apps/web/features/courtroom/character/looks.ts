@@ -1,3 +1,5 @@
+import type { Suit } from "@tribunal/bot/room/world";
+
 // Appearance of the members: every member gets a stable look from their ID, the colours that tint their model.
 const skinTones = ["#ffd1a1", "#efb88d", "#d6986a", "#b97953", "#8d563f", "#6e4538"] as const;
 const hairColors = ["#2b1d1a", "#4a2c26", "#85512e", "#d8a254", "#b75f38", "#3a3547", "#b2a6a6", "#ece4d8", "#7a3fb0", "#2f6f8f"] as const;
@@ -33,6 +35,40 @@ const randomFor = (id: string) => {
 };
 
 const pick = <L extends readonly [unknown, ...unknown[]]>(random: () => number, list: L): L[number] => list[Math.floor(random() * list.length)] ?? list[0];
+
+/** Colour of each tinted texture of the member model (the keys are the texture names) */
+export const lookTints = (look: Look): Record<string, string> => ({
+  skin: look.skin,
+  hair: look.hair,
+  main: look.main,
+  pants: look.pants,
+  shoes: look.shoes,
+});
+
+/** Spider-Man suits of the hero landing: the whole body is tinted, mask included (the head texture is the skin) */
+export const SUIT_TINTS: Record<Suit, Record<string, string>> = {
+  red: {
+    skin: "#c8202a",
+    hair: "#c8202a",
+    main: "#c8202a",
+    pants: "#1f3a8f",
+    shoes: "#c8202a",
+  },
+  black: {
+    skin: "#16161c",
+    hair: "#16161c",
+    main: "#16161c",
+    pants: "#16161c",
+    shoes: "#16161c",
+  },
+  venom: {
+    skin: "#f2f2f2",
+    hair: "#0b0b0f",
+    main: "#0b0b0f",
+    pants: "#0b0b0f",
+    shoes: "#0b0b0f",
+  },
+};
 
 export const memberLook = (id: string): Look => {
   const random = randomFor(id);

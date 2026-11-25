@@ -32,7 +32,7 @@ export type TomatoFlight = Extract<
   ServerMessage,
   {
     type: "effect";
-    kind: "tomato";
+    kind: "tomato" | "web";
   }
 > & { at: number };
 /** An objection shouted (above the shouter) or a rumor whispered (at the ear of the target) */
@@ -132,7 +132,7 @@ export const useRoomSocket = (url: string, token?: string) => {
       // Chaos: shouts and whispers show as bubbles, tomatoes fly, rumors and refusals pop up for a few seconds.
       if (message.type === "effect") {
         const at = Date.now();
-        if (message.kind === "tomato") setTomatoes((current) => [
+        if (message.kind === "tomato" || message.kind === "web") setTomatoes((current) => [
           ...current,
           {
             ...message,

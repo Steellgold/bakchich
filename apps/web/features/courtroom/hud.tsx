@@ -21,13 +21,6 @@ const VOTE_RESULTS: Record<VoteResult, string> = {
   "no-trial": "Aucun procès en cours.",
 };
 
-const ROLE_LABELS: Record<Role, string> = {
-  accused: "Accusé",
-  prosecutor: "Procureur",
-  defense: "Avocat de la défense",
-  witness: "Témoin",
-};
-
 const PHASE_LABELS: Record<Phase, string> = {
   "opening": "Ouverture",
   "examination": "Interrogatoire",
@@ -73,19 +66,17 @@ const floorName = (trial: TrialView, floor: Floor): string | null => {
   return null;
 };
 
-const roleLabel = (role: Role | null, seatId: string | null) => {
-  if (role !== null) return ROLE_LABELS[role];
-
-  return seatId?.startsWith("jury-") === true ? "Juré" : "Public";
-};
-
 type HudProps = {
   trial: TrialView | null;
   verdict: string | null;
   voteResult: VoteResult | null;
   interaction: NearbyInteraction;
   role: Role | null;
+  /** Spider-Man form: the web replaces the tomato */
+  hero: boolean;
   seatId: string | null;
+  /** Room not ready yet: the loading screen, the only time the key hints show */
+  loading: boolean;
   target: PlayerState | null;
   toasts: Toast[];
   aim: Aim;
@@ -99,9 +90,9 @@ type HudProps = {
   send: (message: ClientMessage) => void;
 };
 
-/** Overlay: the case and the verdict at the top, the role and controls bottom-left, the prompt and the vote bottom-centre */
+/** Overlay: the case and the verdict at the top, the loading key hints bottom-left, the prompt and the vote bottom-centre */
 export const Hud
-  = ({ trial, verdict, voteResult, interaction, role, seatId, target, aim, gaugeRef, toasts, challenge, onChallengeAnswered, game, roomGame, archives, onCloseArchives, send }: HudProps) => {
+  = ({ trial, verdict, voteResult, interaction, role, hero, seatId, loading, target, aim, gaugeRef, toasts, challenge, onChallengeAnswered, game, roomGame, archives, onCloseArchives, send }: HudProps) => {
     const [now, setNow] = useState(() => Date.now());
     const [guilty, setGuilty] = useState<boolean | null>(null);
 
@@ -180,51 +171,49 @@ export const Hud
         <div className="hud-bottom">
           {roomGame === null && (
             <div className="hud-corner">
-              <span className="plate role">
-                <span className="role-label">Vous</span>
-                {roleLabel(role, seatId)}
-              </span>
-              <ul className="hints">
-                <li className="hint">
-                  <kbd>Z</kbd>
-                  <kbd>Q</kbd>
-                  <kbd>S</kbd>
-                  <kbd>D</kbd>
-                  Bouger
-                </li>
-                <li className="hint">
-                  <kbd>Maj</kbd>
-                  Courir
-                </li>
-                <li className="hint">
-                  <kbd>Espace</kbd>
-                  Sauter
-                </li>
-                <li className="hint">
-                  <kbd>Clic</kbd>
-                  Caméra à la souris
-                </li>
-                <li className="hint">
-                  <kbd>Échap</kbd>
-                  Libérer le curseur
-                </li>
-                {canMakeChaos && (
-                  <>
-                    <li className="hint">
-                      <kbd>1</kbd>
-                      Tomate
-                    </li>
-                    <li className="hint">
-                      <kbd>O</kbd>
-                      Objection !
-                    </li>
-                    <li className="hint">
-                      <kbd>B</kbd>
-                      Dormir
-                    </li>
-                  </>
-                )}
-              </ul>
+              {loading && (
+                <ul className="hints">
+                  <li className="hint">
+                    <kbd>Z</kbd>
+                    <kbd>Q</kbd>
+                    <kbd>S</kbd>
+                    <kbd>D</kbd>
+                    Bouger
+                  </li>
+                  <li className="hint">
+                    <kbd>Maj</kbd>
+                    Courir
+                  </li>
+                  <li className="hint">
+                    <kbd>Espace</kbd>
+                    Sauter
+                  </li>
+                  <li className="hint">
+                    <kbd>Clic</kbd>
+                    Caméra à la souris
+                  </li>
+                  <li className="hint">
+                    <kbd>Échap</kbd>
+                    Libérer le curseur
+                  </li>
+                  {canMakeChaos && (
+                    <>
+                      <li className="hint">
+                        <kbd>1</kbd>
+                        {hero ? "Toile d'araignée" : "Tomate"}
+                      </li>
+                      <li className="hint">
+                        <kbd>O</kbd>
+                        Objection !
+                      </li>
+                      <li className="hint">
+                        <kbd>B</kbd>
+                        Dormir
+                      </li>
+                    </>
+                  )}
+                </ul>
+              )}
             </div>
           )}
 

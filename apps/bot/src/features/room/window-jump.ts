@@ -49,7 +49,7 @@ export const pickPortalSpot = (taken: Vec2[], random: () => number = Math.random
       z: 15 + random() * (ROOM.depth - 17),
     };
 
-    if (canStand(spot, "public") && taken.every((other) => Math.hypot(other.x - spot.x, other.z - spot.z) >= SPOT_GAP)) return spot;
+    if (canStand(spot) && taken.every((other) => Math.hypot(other.x - spot.x, other.z - spot.z) >= SPOT_GAP)) return spot;
   }
 
   return { ...ROOM.spawn };
@@ -143,6 +143,7 @@ export class WindowJumps {
       }
       else if (player.air === "fall" && phaseMs >= FALL_MS) {
         player.air = landingKind(jump.held);
+        if (player.air === "hero") player.hero = true;
         jump.phaseAt = now;
         messages.push({
           type: "landing",

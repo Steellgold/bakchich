@@ -26,4 +26,8 @@ assert.equal(behind.impact?.kind, "surface");
 const rail = simulateTomato({ x: -5, y: 0.9, z: 15 }, { x: 0, y: 0, z: -speed }, []);
 assert.ok(rail.impact?.kind === "surface" && Math.abs(rail.impact.point.z - 13.3) < 0.01);
 
+// A web throw is the same flight: the server only changes the kind of effect.
+const web = simulateTomato(origin, { x: 0, y: 1, z: -speed }, players);
+assert.deepEqual(web, hit);
+
 console.log("tomato ballistics ok");

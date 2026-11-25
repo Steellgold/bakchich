@@ -3,9 +3,11 @@
 // Body of a character: the Blockbench model of a member (tinted with their look) or of a court officer (own colours), drawn in the toon style of the room, with its clips.
 import type { Look } from "./looks";
 import type { Clips, FaceSpec, Rig } from "./motion";
+import type { Suit } from "@tribunal/bot/room/world";
 import type { RefObject } from "react";
 import type { Texture } from "three";
 import { InkOutlines, mergeCubes, toonify } from "../toon-model";
+import { lookTints, SUIT_TINTS } from "./looks";
 import { BB, buildFace, CLIP_NAMES, ON_DEMAND_CLIPS, ONE_SHOT_CLIPS } from "./motion";
 import { facetGeometry, Toon } from "./parts";
 import { useGLTF } from "@react-three/drei";
@@ -77,9 +79,11 @@ export const modelBaseY = (seated: boolean, onBench: boolean, elevation: number)
 };
 
 /** A member's model is tinted with their `look` and wears their avatar badge; the officers have none */
-export const CharacterModel = ({ kind, look, texture, splat, rigRef }: {
+export const CharacterModel = ({ kind, look, suit = null, texture, splat, rigRef }: {
   kind: ModelKind;
   look?: Look;
+  /** Spider-Man suit worn instead of the look (members only) */
+  suit?: Suit | null;
   texture: Texture | null;
   splat: boolean;
   rigRef: RefObject<Rig | null>;
@@ -90,13 +94,7 @@ export const CharacterModel = ({ kind, look, texture, splat, rigRef }: {
     mergeCubes(scene, (mesh) => !UNOUTLINED.test(mesh.name), KEPT_APART);
     const root = scene.clone(true);
     // The member's skin, hair, vest, pants and shoes are painted in light grey and tinted; the shirt, tie, belt, face and the officers keep their colours.
-    const tints: Record<string, string> = look === undefined ? {} : {
-      skin: look.skin,
-      hair: look.hair,
-      main: look.main,
-      pants: look.pants,
-      shoes: look.shoes,
-    };
+    const tints: Record<string, string> = look === undefined ? {} : lookTints(look);
     const { materials, outlined } = toonify(root, (mesh) => mesh.userData.outline === true, tints);
 
     const mixer = new AnimationMixer(root);
@@ -164,6 +162,16 @@ export const CharacterModel = ({ kind, look, texture, splat, rigRef }: {
       rigRef.current = null;
     };
   }, [model, rigRef]);
+
+  // The suit recolours the tinted materials in place (no rebuild, so the clips keep playing), the look comes back afterwards:
+  useEffect(() => {
+    if (look === undefined) return;
+
+    for (const [name, colour] of Object.entries(suit === null ? lookTints(look) : SUIT_TINTS[suit])) {
+      const material = model.materials.get(name);
+      if (material !== undefined && "color" in material && material.color instanceof Color) material.color.set(colour);
+    }
+  }, [model, look, suit]);
 
   // Materials and face overlays belong to this instance only:
   useEffect(

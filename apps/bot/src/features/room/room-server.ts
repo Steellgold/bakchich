@@ -228,6 +228,11 @@ const handleMessage = (member: RoomMember, socket: WebSocket, raw: string) => {
     windowJumps.hold(member.id, message.held);
     return;
   }
+  if (message.type === "hero-suit") {
+    const player = world.player(member.id);
+    if (player !== undefined && !world.isPlaying(member.id)) player.suit = message.suit;
+    return;
+  }
   // Diving, away, falling or landing: the member only waits for the end of the jump.
   if (world.player(member.id)?.air !== null) return;
   if (world.isPlaying(member.id) && !["rps-pick", "connect4-drop", "game-hover", "quit-game", "vote"].includes(message.type)) return;

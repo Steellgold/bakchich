@@ -1,14 +1,15 @@
 import type { Trial } from "../court/engine";
 import type { Seat, Vec2 } from "./layout";
-import { GATE, GATE_RADIUS, OBSTACLES, PLAYER_RADIUS, RESTRICTED_ZONE, ROOM, SEATS, WELL } from "./layout";
+import { GATE, GATE_RADIUS, OBSTACLES, PLAYER_RADIUS, ROOM, SEATS } from "./layout";
 
 export type Role = "accused" | "prosecutor" | "defense" | "witness";
 
-/** Where a character may walk: the public side, the restricted zone but not the well, or everywhere */
-export type Access = "public" | "party" | "counsel";
-
 /** Where a member is in a window jump: diving out, away outside, falling out of the portal, or landing (belly flop or superhero) */
 export type Air = "dive" | "away" | "fall" | "flop" | "hero";
+
+/** Spider-Man suits worn for the hero landing, chosen with Tab (the server only stores and broadcasts the choice) */
+export const SUITS = ["red", "black", "venom"] as const;
+export type Suit = (typeof SUITS)[number];
 
 export type PlayerState = {
   id: string;
@@ -19,6 +20,9 @@ export type PlayerState = {
   seatId: string | null;
   role: Role | null;
   air: Air | null;
+  suit: Suit;
+  /** In the Spider-Man form (set by the hero landing) until the member leaves: the suit is worn and the web replaces the tomato */
+  hero: boolean;
 };
 
 const ROLE_SEATS: Record<"prosecutor" | "defense" | "witness", Seat> = {
@@ -61,50 +65,35 @@ export const nearbyBenchSeat = (position: Vec2, occupiedSeats: ReadonlySet<strin
   return closest;
 };
 
-const inRestrictedZone = (point: Vec2) => point.x >= RESTRICTED_ZONE.min.x && point.x <= RESTRICTED_ZONE.max.x && point.z >= RESTRICTED_ZONE.min.z && point.z <= RESTRICTED_ZONE.max.z;
-
-const inWell = (point: Vec2) => point.x >= WELL.min.x && point.x <= WELL.max.x && point.z >= WELL.min.z && point.z <= WELL.max.z;
-
 const insideRoom = (point: Vec2) => Math.abs(point.x) <= ROOM.width / 2 - PLAYER_RADIUS && point.z >= PLAYER_RADIUS && point.z <= ROOM.depth - PLAYER_RADIUS;
 
 const collides = (point: Vec2) => OBSTACLES.some(
   (box) => point.x > box.min.x - PLAYER_RADIUS && point.x < box.max.x + PLAYER_RADIUS && point.z > box.min.z - PLAYER_RADIUS && point.z < box.max.z + PLAYER_RADIUS,
 );
 
-/** Whether a standing character may be at this point, shared with the client for its local prediction */
-export const canStand = (point: Vec2, access: Access): boolean => insideRoom(point) && !collides(point) && (access === "counsel" || (!inWell(point) && (access === "party" || !inRestrictedZone(point))));
+/** Whether a standing character may be at this point (anyone can walk anywhere, only walls and furniture block), shared with the client for its local prediction */
+export const canStand = (point: Vec2): boolean => insideRoom(point) && !collides(point);
 
 /** Step towards `to`, sliding along a wall on one axis when the straight step is blocked; stays at `from` when both are, shared with the client */
-export const slide = (from: Vec2, to: Vec2, access: Access): Vec2 => {
-  if (canStand(to, access)) return to;
+export const slide = (from: Vec2, to: Vec2): Vec2 => {
+  if (canStand(to)) return to;
 
   const alongX = {
     x: to.x,
     z: from.z,
   };
 
-  if (canStand(alongX, access)) return alongX;
+  if (canStand(alongX)) return alongX;
 
   const alongZ = {
     x: from.x,
     z: to.z,
   };
-  return canStand(alongZ, access) ? alongZ : from;
+  return canStand(alongZ) ? alongZ : from;
 };
 
 /** Longest single step checked by the server: shorter than the thinnest obstacle widened by the player radius, so a move can never cross a rail */
 const MAX_STEP = 0.25;
-
-/** Counsel (the prosecutor, the defense lawyer, or the accused defending themselves) walks in the well only while a witness is on the stand */
-export const accessFor = (role: Role | null, trial: {
-  lawyer: unknown;
-  witness: unknown;
-} | null): Access => {
-  if (role === null) return "public";
-
-  const isCounsel = role === "prosecutor" || role === "defense" || (role === "accused" && trial?.lawyer === null);
-  return isCounsel && trial?.witness !== null && trial?.witness !== undefined ? "counsel" : "party";
-};
 
 const roleOf = (trial: Trial | null, id: string): Role | null => {
   if (trial === null) return null;
@@ -140,6 +129,8 @@ export class World {
       seatId: null,
       role: null,
       air: null,
+      suit: "red",
+      hero: false,
     };
     this.states.set(player.id, state);
     this.assignRole(state);
@@ -161,7 +152,6 @@ export class World {
     if (state?.seatId !== null || this.gameLocks.has(id) || state.air !== null) return 0;
 
     state.rotation = rotation;
-    const access = accessFor(state.role, this.trial);
     let walked = 0;
 
     while (walked < maxDistance) {
@@ -178,7 +168,6 @@ export class World {
           x: state.position.x + (dx / left) * step,
           z: state.position.z + (dz / left) * step,
         },
-        access,
       );
       const moved = Math.hypot(next.x - state.position.x, next.z - state.position.z);
 
@@ -300,7 +289,7 @@ export class World {
     return [...this.states.values()];
   }
 
-  /** During a trial: seat the witness who was called, release the one dismissed, and bring counsel back to their seat when they may no longer walk in the well */
+  /** During a trial: seat the witness who was called and release the one dismissed */
   private refreshRoles(): void {
     for (const state of this.states.values()) {
       const role = roleOf(this.trial, state.id);
@@ -313,11 +302,7 @@ export class World {
         }
 
         if (role === "witness") this.assignRole(state);
-        continue;
       }
-
-      const seat = role === null ? undefined : this.seatFor(role, state.id);
-      if (seat !== undefined && state.seatId === null && accessFor(role, this.trial) !== "counsel" && inWell(state.position)) this.sit(state, seat);
     }
   }
 

@@ -36,6 +36,14 @@ const fade = (group: Group, opacity: number) => group.traverse((object) => {
   material.opacity = opacity;
 });
 
+/** The thrown web: a small pale ball (same size as the tomato once scaled) */
+const WebBall = () => (
+  <mesh>
+    <sphereGeometry args={[0.07, 8, 6]} />
+    <meshBasicMaterial color="#e8eaee" />
+  </mesh>
+);
+
 /** A tomato flying along the arc the server computed, then (on a wall, a bench or the floor) a splat that fades; on a player the face splat comes from the snapshot */
 const Tomato = ({ flight }: { flight: TomatoFlight }) => {
   const flyingRef = useRef<Group>(null);
@@ -77,9 +85,9 @@ const Tomato = ({ flight }: { flight: TomatoFlight }) => {
   return (
     <>
       <group ref={flyingRef} scale={1.6}>
-        <ToonModel url={TOMATO} />
+        {flight.kind === "web" ? <WebBall /> : <ToonModel url={TOMATO} />}
       </group>
-      {impact?.kind === "surface" && orientation !== undefined && (
+      {flight.kind === "tomato" && impact?.kind === "surface" && orientation !== undefined && (
         <group
           ref={splatRef}
           visible={false}

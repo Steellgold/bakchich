@@ -12,7 +12,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { CHAOS_REACH } from "@tribunal/bot/room/chaos";
 import { ARCHIVES, ARCHIVES_RADIUS, GATE, GATE_RADIUS, MAX_SPEED, ROOM, RUN_SPEED, TICK_MS } from "@tribunal/bot/room/layout";
 import { tomatoSpeed, TOMATO_CHARGE_S } from "@tribunal/bot/room/tomato";
-import { accessFor, nearbyBenchSeat, SEAT_REACH, seatForRole, slide } from "@tribunal/bot/room/world";
+import { nearbyBenchSeat, SEAT_REACH, seatForRole, slide, SUITS } from "@tribunal/bot/room/world";
 import { useCallback, useEffect, useRef } from "react";
 import { PerspectiveCamera } from "three";
 
@@ -150,6 +150,9 @@ export const PlayerController
     const airRef = useRef(self.air);
     airRef.current = self.air;
     const heldRef = useRef(false);
+    // Suit of the Tab key: follows the server value, moves ahead of it on each press
+    const suitRef = useRef(self.suit);
+    suitRef.current = self.suit;
     // The audience makes chaos; parties and jurors in their box do not:
     const canMakeChaos = !inGame && self.role === null && self.seatId?.startsWith("jury-") !== true && self.air === null;
 
@@ -174,6 +177,18 @@ export const PlayerController
       const down = (event: KeyboardEvent) => {
         if (inGame) return;
         pressedRef.current.add(event.code);
+
+        // Tab would move the browser focus: it cycles the Spider-Man suit instead (red, black, Venom).
+        if (event.code === "Tab") {
+          event.preventDefault();
+          if (event.repeat) return;
+          suitRef.current = SUITS[(SUITS.indexOf(suitRef.current) + 1) % SUITS.length] ?? "red";
+          send({
+            type: "hero-suit",
+            suit: suitRef.current,
+          });
+          return;
+        }
 
         if (event.repeat) return;
 
@@ -228,7 +243,7 @@ export const PlayerController
             direction,
             power: Math.min(1, (performance.now() - chargeStartRef.current) / 1_000 / TOMATO_CHARGE_S),
           });
-          setAim("none");
+          setAim("holding");
         }
       };
       const release = (event: MouseEvent) => {
@@ -302,7 +317,7 @@ export const PlayerController
           z: predictedRef.current.z + dz,
         };
         // Same sliding rule as the server, so the prediction and the authoritative position stay together along walls:
-        predictedRef.current = slide(predictedRef.current, next, accessFor(self.role, trial));
+        predictedRef.current = slide(predictedRef.current, next);
         facingRef.current = Math.atan2(dx, dz);
       }
 
@@ -456,6 +471,8 @@ export const PlayerController
         splat={splat}
         fighting={fighting}
         air={self.air}
+        suit={self.suit}
+        hero={self.hero}
       />
     );
   };

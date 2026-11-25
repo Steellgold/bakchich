@@ -23,7 +23,7 @@ const isFree = (placement: GamePlacement, others: PlayerState[], games: RoomGame
       if (!canStand({
         x: position.x + Math.cos(rotation) * x + Math.sin(rotation) * z,
         z: position.z - Math.sin(rotation) * x + Math.cos(rotation) * z,
-      }, "public")) return false;
+      })) return false;
     }
   }
   const spots = gamePlayerPositions(placement);

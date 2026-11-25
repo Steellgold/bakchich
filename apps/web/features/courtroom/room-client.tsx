@@ -10,6 +10,7 @@ import { BoardGames } from "./chaos/board-game";
 import { ChaosEffects } from "./chaos/chaos-effects";
 import { GameController } from "./chaos/game-controller";
 import { Tunnel } from "./chaos/tunnel";
+import { WebOverlay } from "./chaos/web-overlay";
 import { WindowJumpEffects } from "./chaos/window-jump";
 import { Character } from "./character/character";
 import { Courtroom } from "./courtroom";
@@ -19,6 +20,7 @@ import { PlayerController } from "./player-controller";
 import { CLERK_SEAT, isBenchSeat, seatById, seatElevation } from "./seats";
 import { GameDialog } from "@/components/game-ui";
 import { useRoomSocket } from "@/features/courtroom/use-room-socket";
+import { useProgress } from "@react-three/drei";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { ENTRANCE, JUDGE_NAME, MAX_SPEED, OBSTACLES, RESTRICTED_ZONE, ROOM, SEATS } from "@tribunal/bot/room/layout";
 import Link from "next/link";
@@ -150,11 +152,15 @@ export const RoomClient = ({ url, token }: {
   const gaugeRef = useRef<HTMLElement>(null);
   const [leaving, setLeaving] = useState<LeavingPlayer[]>([]);
   const previousPlayersRef = useRef(new Map<string, LeavingPlayer>());
-  const jurorsRef = useRef<Set<string> | null>(null);
-  const gateTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const [gateOpen, setGateOpen] = useState(false);
   const [flashAt, setFlashAt] = useState(0);
   const selfAirRef = useRef<Air | null>(null);
+  // Loading screen: from the first render until the snapshot is in and the models are loaded; then the key hints go away for the session.
+  const { active: assetsLoading } = useProgress();
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (selfId !== null && snapshot !== null && !assetsLoading) setReady(true);
+  }, [selfId, snapshot, assetsLoading]);
 
   // The jumper's tunnel ends with a white flash when they come out of the portal:
   const selfAir = snapshot?.players.find((player) => player.id === selfId)?.air ?? null;
@@ -163,23 +169,6 @@ export const RoomClient = ({ url, token }: {
 
     selfAirRef.current = selfAir;
   }, [selfAir]);
-
-  // The gate opens for a moment when someone becomes a juror:
-  useEffect(() => {
-    if (snapshot === null) return;
-
-    const jurors = new Set(snapshot.players.filter((player) => player.seatId?.startsWith("jury-") === true).map((player) => player.id));
-    const previous = jurorsRef.current;
-    jurorsRef.current = jurors;
-
-    if (previous === null || ![...jurors].some((id) => !previous.has(id))) return;
-
-    setGateOpen(true);
-    clearTimeout(gateTimerRef.current);
-    gateTimerRef.current = setTimeout(() => setGateOpen(false), 2500);
-  }, [snapshot]);
-
-  useEffect(() => () => clearTimeout(gateTimerRef.current), []);
 
   // Members who vanished from the snapshot walk out instead of disappearing:
   useEffect(() => {
@@ -243,7 +232,7 @@ export const RoomClient = ({ url, token }: {
         <Courtroom doorOpen={leaving.length > 0} sideDoorOpen={(snapshot?.officers.length ?? 0) > 0} windowBreaks={windowBreaks} />
         <WindowJumpEffects windowBreaks={windowBreaks} portals={portals} landings={landings} />
         {self?.air === "away" && <Tunnel self={self} />}
-        <Gate open={gateOpen} />
+        <Gate players={snapshot?.players ?? []} />
         <BoardGames games={roomGames} selfId={selfId} hoverColumn={hoverColumn} />
         {roomGame !== null && self !== undefined && (
           <GameController key={roomGame.id} game={roomGame} self={self} send={send} onHover={setHoverColumn} />
@@ -327,6 +316,8 @@ export const RoomClient = ({ url, token }: {
               level={levelOf(player.id)}
               jumpAt={jumps[player.id]}
               air={player.air}
+              suit={player.suit}
+              hero={player.hero}
               sleeping={sleeping.has(player.id)}
               leanSide={leanOf(player.id, player.position, player.rotation)}
               splat={splats.has(player.id)}
@@ -368,6 +359,7 @@ export const RoomClient = ({ url, token }: {
       </Canvas>
 
       {flashAt > 0 && <div key={flashAt} className="flash" />}
+      <WebOverlay flights={tomatoes} selfId={selfId} />
 
       <Hud
         trial={snapshot?.trial ?? null}
@@ -375,6 +367,8 @@ export const RoomClient = ({ url, token }: {
         voteResult={voteResult}
         interaction={roomGame === null ? interaction : null}
         role={self?.role ?? null}
+        hero={self?.hero ?? false}
+        loading={!ready}
         seatId={self?.seatId ?? null}
         target={target}
         aim={roomGame === null ? aim : "none"}

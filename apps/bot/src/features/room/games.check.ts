@@ -96,7 +96,7 @@ const found = findGamePlacement([a, b], world.players(), []);
 assert.ok(found !== null);
 assert.ok(found.position.z > 13.6);
 const positions = gamePlayerPositions(found);
-for (const position of positions) assert.ok(canStand(position, "public"));
+for (const position of positions) assert.ok(canStand(position));
 assert.ok(Math.abs(Math.hypot(positions[0].x - positions[1].x, positions[0].z - positions[1].z) - 1.1) < 1e-9);
 const activeGame = hover.roomGames()[0];
 assert.ok(activeGame?.kind === "connect4");
@@ -115,5 +115,12 @@ assert.deepEqual(a.position, before);
 assert.equal(a.seatId, null);
 world.releaseGame(["a"]);
 assert.ok(world.move("a", { x: before.x + 0.1, z: before.z }, 1, 1) > 0);
+
+// Anyone walks anywhere: a free player reaches the well, the jury box and the side wall, and cannot cross a rail.
+assert.ok(canStand({ x: 0, z: 10 }) && canStand({ x: 9.7, z: 8 }) && canStand({ x: -9.7, z: 2 }));
+assert.ok(!canStand({ x: 4.9, z: 8 }));
+a.position = { x: 0, z: 14 };
+assert.ok(world.move("a", { x: 0, z: 10 }, 1, 10) > 3.9);
+assert.ok(Math.abs(a.position.z - 10) < 1e-6);
 
 console.log("minigame rules, privacy, placement, hover throttle and movement locks ok");

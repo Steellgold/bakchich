@@ -8,6 +8,36 @@
   inset: 0;
 }
 
+/* The victim's screen after a web hit: threads in white-grey, fading out */
+.web-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  fill: rgb(230 232 238 / 0.08);
+  stroke: #e6e8ee;
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  animation: web-out 1.6s ease-in forwards;
+}
+
+.web-overlay line,
+.web-overlay polygon {
+  vector-effect: non-scaling-stroke;
+}
+
+@keyframes web-out {
+  0%,
+  45% {
+    opacity: 0.9;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
 /* End of the jumper's tunnel: a white flash that fades out */
 .flash {
   position: absolute;
@@ -238,25 +268,6 @@
 .verdict-line {
   font: 400 var(--text-lg) / 1.2 var(--font-heading);
   text-shadow: 0 2px 0 var(--purple-950);
-}
-
-.role {
-  --cut: 10px;
-  --bw: 4px;
-  --bev: 2px;
-  --lift: 3px;
-
-  display: flex;
-  flex-direction: column;
-  padding: 7px 16px 8px;
-  font: 400 var(--text-md) / 1.15 var(--font-heading);
-}
-
-.role-label {
-  color: var(--gold-400);
-  font: 800 var(--text-xs) / 1.2 var(--font-body);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 /* Contextual prompt: shown when the player stands next to something to do */

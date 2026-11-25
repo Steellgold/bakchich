@@ -4,7 +4,7 @@ import type { ModelKind } from "./model";
 import type { Rig } from "./motion";
 import type { RoomGame } from "@tribunal/bot/room/chaos";
 import type { Vec2 } from "@tribunal/bot/room/layout";
-import type { Air } from "@tribunal/bot/room/world";
+import type { Air, Suit } from "@tribunal/bot/room/world";
 import type { Group } from "three";
 import { EmojiText } from "../emoji-text";
 import { animateGame } from "./game-motion";
@@ -49,6 +49,10 @@ type CharacterProps = {
   jumpAt?: number;
   /** Window jump phase: hidden while away, otherwise the dive, fall and landing clips drive the body */
   air?: Air | null;
+  /** Spider-Man suit, worn while `hero` */
+  suit?: Suit;
+  /** In the Spider-Man form (from the hero landing until the member leaves) */
+  hero?: boolean;
   /** Height the fall starts from (the tunnel of the jumper falls without losing height) */
   fallFrom?: number;
   /** The clerk typing on his keyboard */
@@ -63,7 +67,7 @@ type CharacterProps = {
 
 /** A member with a stable look from their ID, or a court officer (judge, police, clerk), each one a Blockbench model. */
 export const Character
-  = ({ id, name, avatarUrl, position, rotation, seated, onBench = false, speech, elevation = 0, speaking = false, level = 0, variant = "member", sleeping = false, leanSide = 0, splat = false, fighting = false, game = null, jumpAt = 0, air = null, fallFrom = FALL_HEIGHT, typing = false, interpolate = false, follow }: CharacterProps) => {
+  = ({ id, name, avatarUrl, position, rotation, seated, onBench = false, speech, elevation = 0, speaking = false, level = 0, variant = "member", sleeping = false, leanSide = 0, splat = false, fighting = false, game = null, jumpAt = 0, air = null, suit = "red", hero = false, fallFrom = FALL_HEIGHT, typing = false, interpolate = false, follow }: CharacterProps) => {
     const groupRef = useRef<Group>(null);
     const modelRef = useRef<Rig>(null);
     const motionRef = useRef({
@@ -232,7 +236,7 @@ export const Character
     return (
       <group ref={groupRef} position={[position.x, baseY, position.z]}>
         <Suspense fallback={null}>
-          <CharacterModel kind={variant} look={look} texture={texture} splat={splat} rigRef={modelRef} />
+          <CharacterModel kind={variant} look={look} suit={hero ? suit : null} texture={texture} splat={splat} rigRef={modelRef} />
         </Suspense>
 
         <Html position={[0, 2.4, 0]} center distanceFactor={10}>

@@ -112,7 +112,7 @@ export const createRoomChaos = ({ world, send, sendTo, broadcast, displayedTrial
     if (!chaos.ready(id, "tomato", now)) {
       sendTo(id, {
         type: "chaos-refused",
-        reason: "Ta dernière tomate n'a pas fini de sécher, patiente.",
+        reason: thrower.hero ? "Ta toile n'a pas fini de se tisser, patiente." : "Ta dernière tomate n'a pas fini de sécher, patiente.",
       });
       return;
     }
@@ -126,7 +126,7 @@ export const createRoomChaos = ({ world, send, sendTo, broadcast, displayedTrial
     const { duration, impact } = simulateTomato(origin, velocity, world.players().filter((player) => player.id !== id && player.air === null));
     broadcast({
       type: "effect",
-      kind: "tomato",
+      kind: thrower.hero ? "web" : "tomato",
       fromId: id,
       origin,
       velocity,
@@ -134,8 +134,8 @@ export const createRoomChaos = ({ world, send, sendTo, broadcast, displayedTrial
       impact,
     });
 
-    // The face is only splattered once the tomato lands:
-    if (impact?.kind === "player") setTimeout(() => chaos.splat(impact.id, Date.now()), duration * 1_000);
+    // The face is only splattered once the tomato lands (a web leaves no splat, the victim's screen shows it):
+    if (!thrower.hero && impact?.kind === "player") setTimeout(() => chaos.splat(impact.id, Date.now()), duration * 1_000);
   };
 
   const quitGame = (id: string) => {

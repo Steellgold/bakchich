@@ -3,6 +3,7 @@ import type { Floor, Member, Mode, Phase, Style, VoteResult } from "../court/eng
 import type { Challenge, GameView, Officer, RoomGame } from "./chaos";
 import type { TomatoImpact, Vec3 } from "./tomato";
 import type { PlayerState } from "./world";
+import { SUITS } from "./world";
 import { z } from "zod";
 
 const vec3Schema = z.object({
@@ -81,6 +82,11 @@ const clientMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("hold-landing"),
     held: z.boolean(),
   }),
+  /** Spider-Man suit, worn from the hero landing until the member leaves */
+  z.object({
+    type: z.literal("hero-suit"),
+    suit: z.enum(SUITS),
+  }),
 ]);
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
@@ -112,6 +118,17 @@ export type Npc = {
   name: string;
   avatarUrl: string | null;
   seatId: string;
+};
+
+/** A tomato or a web (Spider-Man form) in flight: the same ballistics, the kind only changes what flies and what the impact does */
+type ThrownEffect = {
+  type: "effect";
+  fromId: string;
+  origin: Vec3;
+  velocity: Vec3;
+  /** Seconds of flight until the impact */
+  duration: number;
+  impact: TomatoImpact | null;
 };
 
 export type ServerMessage = {
@@ -147,15 +164,10 @@ export type ServerMessage = {
   fromId: string;
   toId: string;
 } | {
-  type: "effect";
   kind: "tomato";
-  fromId: string;
-  origin: Vec3;
-  velocity: Vec3;
-  /** Seconds of flight until the impact */
-  duration: number;
-  impact: TomatoImpact | null;
-} | {
+} & ThrownEffect | {
+  kind: "web";
+} & ThrownEffect | {
   type: "effect";
   kind: "objection" | "jump";
   fromId: string;

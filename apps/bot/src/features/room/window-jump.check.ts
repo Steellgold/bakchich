@@ -24,6 +24,8 @@ const player: PlayerState = {
   seatId: null,
   role: null,
   air: null,
+  suit: "red",
+  hero: false,
 };
 const jumps = new WindowJumps();
 const tick = (now: number) => jumps.tick(now, () => player, () => []);
@@ -37,6 +39,7 @@ assert.equal(player.air, "fall");
 jumps.hold("a", true);
 const landed = tick(1_000 + AWAY_MS + FALL_MS);
 assert.equal(player.air, "hero");
+assert.equal(player.hero, true);
 assert.equal(landed[0]?.type === "landing" && landed[0].kind, "hero");
 const ended = tick(1_000 + AWAY_MS + FALL_MS + HERO_MS);
 assert.equal(player.air, null);
