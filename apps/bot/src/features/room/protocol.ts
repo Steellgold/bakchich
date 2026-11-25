@@ -1,8 +1,15 @@
 // WebSocket messages between the courtroom client and the bot (relative imports only, shared with apps/web).
 import type { Floor, Member, Mode, Phase, Style, VoteResult } from "../court/engine";
-import type { Challenge, GameView, Officer } from "./chaos";
+import type { Challenge, GameView, Officer, RoomGame } from "./chaos";
+import type { TomatoImpact, Vec3 } from "./tomato";
 import type { PlayerState } from "./world";
 import { z } from "zod";
+
+const vec3Schema = z.object({
+  x: z.number(),
+  y: z.number(),
+  z: z.number(),
+});
 
 const clientMessageSchema = z.discriminatedUnion("type", [
   /** Explicit session token, for clients whose cookie does not reach the WebSocket (phase 3 Activity) */
@@ -29,7 +36,11 @@ const clientMessageSchema = z.discriminatedUnion("type", [
   // Chaos in the audience:
   z.object({
     type: z.literal("throw-tomato"),
-    targetId: z.string(),
+    /** Where the tomato leaves the hand, and the aimed direction (any length) */
+    origin: vec3Schema,
+    direction: vec3Schema,
+    /** Charge of the throw from 0 to 1 */
+    power: z.number().min(0).max(1),
   }),
   z.object({
     type: z.literal("whisper"),
@@ -56,11 +67,20 @@ const clientMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("connect4-drop"),
     column: z.number().int().min(0).max(6),
   }),
+  z.object({
+    type: z.literal("game-hover"),
+    column: z.number().int().min(0).max(6),
+  }),
   z.object({ type: z.literal("quit-game") }),
   z.object({ type: z.literal("toggle-sleep") }),
   z.object({ type: z.literal("shout-objection") }),
   z.object({ type: z.literal("jump") }),
   z.object({ type: z.literal("open-archives") }),
+  /** Space held (true) or released while diving and falling out of the portal: held at the landing means a superhero landing */
+  z.object({
+    type: z.literal("hold-landing"),
+    held: z.boolean(),
+  }),
 ]);
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
@@ -110,6 +130,7 @@ export type ServerMessage = {
   splats: string[];
   fighting: string[];
   officers: Officer[];
+  games: RoomGame[];
 } | {
   type: "speech";
   speakerId: string | null;
@@ -122,13 +143,45 @@ export type ServerMessage = {
   result: VoteResult;
 } | {
   type: "effect";
-  kind: "tomato" | "whisper";
+  kind: "whisper";
   fromId: string;
   toId: string;
 } | {
   type: "effect";
+  kind: "tomato";
+  fromId: string;
+  origin: Vec3;
+  velocity: Vec3;
+  /** Seconds of flight until the impact */
+  duration: number;
+  impact: TomatoImpact | null;
+} | {
+  type: "effect";
   kind: "objection" | "jump";
   fromId: string;
+} | {
+  /** A diving member broke the window of this side wall (-1 left, 1 right) at this section centre */
+  type: "window-break";
+  side: -1 | 1;
+  z: number;
+} | {
+  /** The ceiling portal over `id`'s landing spot opens, closes 1.5 s later */
+  type: "portal-open";
+  id: string;
+  x: number;
+  z: number;
+} | {
+  type: "portal-close";
+  id: string;
+} | {
+  /** Screen shake for everyone */
+  type: "shake";
+} | {
+  type: "landing";
+  id: string;
+  kind: "flop" | "hero";
+  x: number;
+  z: number;
 } | {
   type: "archives";
   /** The clerk's files, read at the archive cabinet */

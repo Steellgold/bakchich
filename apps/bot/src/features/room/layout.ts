@@ -91,6 +91,10 @@ export const SIDE_DOOR: Vec2 = {
   z: 11,
 };
 
+/** Section centres of the windows on both side walls, and how far from a centre a diving member still fits through */
+export const WINDOW_ZS = [5, 17, 25];
+export const WINDOW_HALF_OPENING = 0.6;
+
 const box = (minX: number, minZ: number, maxX: number, maxZ: number, height: number, kind: Box["kind"]): Box => ({
   min: {
     x: minX,

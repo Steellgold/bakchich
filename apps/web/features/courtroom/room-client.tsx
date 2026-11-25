@@ -1,10 +1,16 @@
 "use client";
 
-import type { NearbyInteraction } from "./player-controller";
+import type { AimState } from "./chaos/aim-preview";
+import type { Aim, NearbyInteraction } from "./player-controller";
 import type { Speech } from "@/features/courtroom/use-room-socket";
 import type { Vec2 } from "@tribunal/bot/room/layout";
-import type { PlayerState } from "@tribunal/bot/room/world";
+import type { Air, PlayerState } from "@tribunal/bot/room/world";
+import { AimPreview } from "./chaos/aim-preview";
+import { BoardGames } from "./chaos/board-game";
 import { ChaosEffects } from "./chaos/chaos-effects";
+import { GameController } from "./chaos/game-controller";
+import { Tunnel } from "./chaos/tunnel";
+import { WindowJumpEffects } from "./chaos/window-jump";
 import { Character } from "./character/character";
 import { Courtroom } from "./courtroom";
 import { Gate } from "./furniture";
@@ -126,15 +132,37 @@ export const RoomClient = ({ url, token }: {
   url: string;
   token?: string;
 }) => {
-  const { selfId, snapshot, speeches, verdict, voteResult, rejected, toasts, tomatoes, jumps, archives, setArchives, challenge, setChallenge, game, send }
+  const { selfId, snapshot, speeches, verdict, voteResult, rejected, toasts, tomatoes, callouts, jumps, archives, setArchives, challenge, setChallenge, game, windowBreaks, portals, landings, shakeAt, send }
     = useRoomSocket(url, token);
   const [interaction, setInteraction] = useState<NearbyInteraction>(null);
   const [target, setTarget] = useState<PlayerState | null>(null);
+  const [hoverColumn, setHoverColumn] = useState(3);
+  const [aim, setAim] = useState<Aim>("none");
+  const aimRef = useRef<AimState>({
+    hand: null,
+    origin: null,
+    velocity: {
+      x: 0,
+      y: 0,
+      z: 0,
+    },
+  });
+  const gaugeRef = useRef<HTMLElement>(null);
   const [leaving, setLeaving] = useState<LeavingPlayer[]>([]);
   const previousPlayersRef = useRef(new Map<string, LeavingPlayer>());
   const jurorsRef = useRef<Set<string> | null>(null);
   const gateTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [gateOpen, setGateOpen] = useState(false);
+  const [flashAt, setFlashAt] = useState(0);
+  const selfAirRef = useRef<Air | null>(null);
+
+  // The jumper's tunnel ends with a white flash when they come out of the portal:
+  const selfAir = snapshot?.players.find((player) => player.id === selfId)?.air ?? null;
+  useEffect(() => {
+    if (selfAirRef.current === "away" && selfAir === "fall") setFlashAt(Date.now());
+
+    selfAirRef.current = selfAir;
+  }, [selfAir]);
 
   // The gate opens for a moment when someone becomes a juror:
   useEffect(() => {
@@ -181,6 +209,8 @@ export const RoomClient = ({ url, token }: {
     );
   }
 
+  const roomGames = snapshot?.games ?? [];
+  const roomGame = roomGames.find((entry) => selfId !== null && entry.players.includes(selfId)) ?? null;
   const self = snapshot?.players.find((player) => player.id === selfId);
   const occupiedSeats = new Set(snapshot?.players.map((player) => player.seatId));
   const speaking = new Set(snapshot?.speaking);
@@ -210,8 +240,14 @@ export const RoomClient = ({ url, token }: {
         <color attach="background" args={["#fff4d6"]} />
         <ambientLight intensity={1.4} />
         <directionalLight position={[6, 14, 10]} intensity={2.2} castShadow />
-        <Courtroom doorOpen={leaving.length > 0} sideDoorOpen={(snapshot?.officers.length ?? 0) > 0} />
+        <Courtroom doorOpen={leaving.length > 0} sideDoorOpen={(snapshot?.officers.length ?? 0) > 0} windowBreaks={windowBreaks} />
+        <WindowJumpEffects windowBreaks={windowBreaks} portals={portals} landings={landings} />
+        {self?.air === "away" && <Tunnel self={self} />}
         <Gate open={gateOpen} />
+        <BoardGames games={roomGames} selfId={selfId} hoverColumn={hoverColumn} />
+        {roomGame !== null && self !== undefined && (
+          <GameController key={roomGame.id} game={roomGame} self={self} send={send} onHover={setHoverColumn} />
+        )}
 
         <Character
           id="clerk"
@@ -225,7 +261,17 @@ export const RoomClient = ({ url, token }: {
           variant="clerk"
           typing={snapshot?.trial !== null && snapshot?.trial !== undefined}
         />
-        <ChaosEffects tomatoes={tomatoes} officers={snapshot?.officers ?? []} positionOf={positionOf} />
+        <ChaosEffects
+          tomatoes={tomatoes}
+          callouts={callouts}
+          officers={snapshot?.officers ?? []}
+          fighting={snapshot?.fighting ?? []}
+          sleepers={(snapshot?.sleeping ?? []).flatMap((id) => {
+            const player = snapshot?.players.find((entry) => entry.id === id);
+            return player === undefined ? [] : [player];
+          })}
+          positionOf={positionOf}
+        />
 
         <Character
           id={SEATS.judge.id}
@@ -280,10 +326,12 @@ export const RoomClient = ({ url, token }: {
               speaking={speaking.has(player.id)}
               level={levelOf(player.id)}
               jumpAt={jumps[player.id]}
+              air={player.air}
               sleeping={sleeping.has(player.id)}
               leanSide={leanOf(player.id, player.position, player.rotation)}
               splat={splats.has(player.id)}
               fighting={fighting.has(player.id)}
+              game={roomGames.find((entry) => entry.players.includes(player.id)) ?? null}
               interpolate
             />
           ))}
@@ -295,6 +343,7 @@ export const RoomClient = ({ url, token }: {
         {self !== undefined && (
           <PlayerController
             self={self}
+            inGame={roomGame !== null}
             trial={snapshot?.trial ?? null}
             speech={latestSpeech(speeches, self.id)}
             speaking={speaking.has(self.id)}
@@ -307,24 +356,34 @@ export const RoomClient = ({ url, token }: {
             send={send}
             occupiedSeats={occupiedSeats}
             onInteraction={setInteraction}
-            others={snapshot?.players.filter((player) => player.id !== self.id) ?? []}
+            others={snapshot?.players.filter((player) => player.id !== self.id && player.air === null) ?? []}
+            shakeAt={shakeAt}
             onTarget={setTarget}
+            onAim={setAim}
+            aimRef={aimRef}
+            gaugeRef={gaugeRef}
           />
         )}
+        <AimPreview aimRef={aimRef} others={snapshot?.players.filter((player) => player.id !== selfId && player.air === null) ?? []} />
       </Canvas>
+
+      {flashAt > 0 && <div key={flashAt} className="flash" />}
 
       <Hud
         trial={snapshot?.trial ?? null}
         verdict={verdict}
         voteResult={voteResult}
-        interaction={interaction}
+        interaction={roomGame === null ? interaction : null}
         role={self?.role ?? null}
         seatId={self?.seatId ?? null}
         target={target}
+        aim={roomGame === null ? aim : "none"}
+        gaugeRef={gaugeRef}
         toasts={toasts}
         challenge={challenge}
         onChallengeAnswered={() => setChallenge(null)}
-        game={game}
+        game={roomGame === null ? null : game}
+        roomGame={roomGame}
         archives={archives}
         onCloseArchives={() => setArchives(null)}
         send={send}

@@ -2,10 +2,13 @@
 
 import type { ModelKind } from "./model";
 import type { Rig } from "./motion";
+import type { RoomGame } from "@tribunal/bot/room/chaos";
 import type { Vec2 } from "@tribunal/bot/room/layout";
+import type { Air } from "@tribunal/bot/room/world";
 import type { Group } from "three";
 import { EmojiText } from "../emoji-text";
-import { EXTRAPOLATE_SECONDS, FOLLOW_RATE, jumpHeight, STALE_SECONDS, STRIDE_PER_METER, TURN_RATE } from "./gestures";
+import { animateGame } from "./game-motion";
+import { diveDistance, EXTRAPOLATE_SECONDS, fallHeight, FOLLOW_RATE, jumpHeight, STALE_SECONDS, STRIDE_PER_METER, TURN_RATE } from "./gestures";
 import { memberLook } from "./looks";
 import { CharacterModel, modelBaseY } from "./model";
 import { animateTalk, animateTyping, driveClips } from "./motion";
@@ -13,6 +16,7 @@ import { useAvatarTexture } from "./parts";
 import { Html } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { MAX_SPEED } from "@tribunal/bot/room/layout";
+import { FALL_HEIGHT } from "@tribunal/bot/room/window-jump";
 import { Suspense, useMemo, useRef } from "react";
 
 type CharacterProps = {
@@ -40,8 +44,13 @@ type CharacterProps = {
   splat?: boolean;
   /** Throwing punches until the police comes */
   fighting?: boolean;
+  game?: RoomGame | null;
   /** When the member last jumped (Date.now()), the hop lasts JUMP_MS */
   jumpAt?: number;
+  /** Window jump phase: hidden while away, otherwise the dive, fall and landing clips drive the body */
+  air?: Air | null;
+  /** Height the fall starts from (the tunnel of the jumper falls without losing height) */
+  fallFrom?: number;
   /** The clerk typing on his keyboard */
   typing?: boolean;
   /** Smoothly follow the given position (remote players) instead of jumping to it */
@@ -54,7 +63,7 @@ type CharacterProps = {
 
 /** A member with a stable look from their ID, or a court officer (judge, police, clerk), each one a Blockbench model. */
 export const Character
-  = ({ id, name, avatarUrl, position, rotation, seated, onBench = false, speech, elevation = 0, speaking = false, level = 0, variant = "member", sleeping = false, leanSide = 0, splat = false, fighting = false, jumpAt = 0, typing = false, interpolate = false, follow }: CharacterProps) => {
+  = ({ id, name, avatarUrl, position, rotation, seated, onBench = false, speech, elevation = 0, speaking = false, level = 0, variant = "member", sleeping = false, leanSide = 0, splat = false, fighting = false, game = null, jumpAt = 0, air = null, fallFrom = FALL_HEIGHT, typing = false, interpolate = false, follow }: CharacterProps) => {
     const groupRef = useRef<Group>(null);
     const modelRef = useRef<Rig>(null);
     const motionRef = useRef({
@@ -73,6 +82,10 @@ export const Character
       talk: 0,
       loud: 0,
     });
+    const airRef = useRef<{ air: Air | null; since: number }>({
+      air,
+      since: -1,
+    });
     const texture = useAvatarTexture(avatarUrl);
     const look = useMemo(() => (variant === "member" ? memberLook(id) : undefined), [id, variant]);
     const baseY = modelBaseY(seated, onBench, elevation);
@@ -86,6 +99,16 @@ export const Character
       const time = state.clock.elapsedTime;
       const target = follow?.current ?? position;
       let desired = target;
+
+      // Seconds since the window jump phase began (counted here, from the first frame that sees it):
+      if (airRef.current.air !== air || airRef.current.since < 0) airRef.current = {
+        air,
+        since: time,
+      };
+
+      const airAge = time - airRef.current.since;
+      // Hidden while away: the jumper is outside the window.
+      current.visible = air !== "away";
 
       if (interpolate) {
         if (target.x !== motion.lastTarget.x || target.z !== motion.lastTarget.z) {
@@ -113,9 +136,15 @@ export const Character
         };
       }
 
+      // The diver goes out through the window:
+      if (air === "dive") desired = {
+        x: target.x + Math.sign(target.x) * diveDistance(airAge),
+        z: target.z,
+      };
+
       const beforeX = current.position.x;
       const beforeZ = current.position.z;
-      const blend = interpolate ? 1 - Math.exp(-delta * FOLLOW_RATE) : 1;
+      const blend = interpolate && game === null && air === null ? 1 - Math.exp(-delta * FOLLOW_RATE) : 1;
       current.position.x += (desired.x - beforeX) * blend;
       current.position.z += (desired.z - beforeZ) * blend;
 
@@ -127,7 +156,7 @@ export const Character
       // Faster than a walk, it becomes a run: longer strides, higher bounce, the body leaning forward.
       const moved = Math.hypot(current.position.x - beforeX, current.position.z - beforeZ);
       const speed = moved / Math.max(delta, 0.001);
-      const walking = !seated && speed > 0.4;
+      const walking = !seated && speed > 0.4 && air === null;
       motion.phase += moved * STRIDE_PER_METER;
       motion.walk += ((walking ? 1 : 0) - motion.walk) * (1 - Math.exp(-delta * 10));
       motion.run += ((walking && speed > MAX_SPEED + 0.5 ? 1 : 0) - motion.run) * (1 - Math.exp(-delta * 8));
@@ -135,8 +164,10 @@ export const Character
         = baseY
           + Math.abs(Math.sin(motion.phase)) * (0.045 + motion.run * 0.07) * motion.walk
           + (fighting ? Math.abs(Math.sin(time * 9)) * 0.06 : 0)
-          + jumpHeight(jumpAt);
-      current.rotation.x = motion.run * 0.18;
+          + jumpHeight(jumpAt)
+          + (air === "fall" ? fallHeight(airAge, fallFrom) : 0);
+      // The dive, flop and landing clips own the pitch of the body: no running lean then.
+      current.rotation.x = air === null ? motion.run * 0.18 : 0;
 
       const rig = modelRef.current;
 
@@ -144,6 +175,8 @@ export const Character
 
       // Each frame starts from the rest pose, then the clips of the model, then the procedural layers on top:
       for (const node of [...rig.arms, ...rig.elbows, ...rig.wrists, ...rig.legs, ...rig.knees, rig.head]) node?.rotation.set(0, 0, 0);
+      for (const arm of rig.arms) if (arm !== null) arm.scale.y = 1;
+      for (const elbow of rig.elbows) if (elbow !== null) elbow.visible = true;
 
       if (rig.clips !== undefined) {
         driveClips(rig.clips, {
@@ -152,6 +185,8 @@ export const Character
           seated,
           fighting,
           jumpAt,
+          air,
+          airAge,
         }, delta);
       }
 
@@ -191,6 +226,7 @@ export const Character
           sleepy: look?.sleepy ?? false,
         });
       }
+      if (game !== null) animateGame(rig, game, id, time, delta);
     });
 
     return (
@@ -202,7 +238,6 @@ export const Character
         <Html position={[0, 2.4, 0]} center distanceFactor={10}>
           <div className="tag">
             {speech !== null && <div className="bubble"><EmojiText>{speech}</EmojiText></div>}
-            {speech === null && sleeping && <div className="bubble">Zzz…</div>}
             <div className="name">{name}</div>
           </div>
         </Html>

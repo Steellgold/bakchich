@@ -1,11 +1,12 @@
 "use client";
 
-import type { NearbyInteraction } from "./player-controller";
+import type { Aim, NearbyInteraction } from "./player-controller";
 import type { Toast } from "@/features/courtroom/use-room-socket";
 import type { Floor, Mode, Phase, Style, VoteResult } from "@tribunal/bot/court/engine";
-import type { Challenge, GameView } from "@tribunal/bot/room/chaos";
+import type { Challenge, GameView, RoomGame } from "@tribunal/bot/room/chaos";
 import type { ArchiveFile, ClientMessage, TrialView } from "@tribunal/bot/room/protocol";
 import type { PlayerState, Role } from "@tribunal/bot/room/world";
+import type { RefObject } from "react";
 import { ArchivesDialog } from "./archives-dialog";
 import { ChaosHud } from "./chaos/chaos-hud";
 import { EmojiText } from "./emoji-text";
@@ -87,9 +88,12 @@ type HudProps = {
   seatId: string | null;
   target: PlayerState | null;
   toasts: Toast[];
+  aim: Aim;
+  gaugeRef: RefObject<HTMLElement | null>;
   challenge: Challenge | null;
   onChallengeAnswered: () => void;
   game: GameView | null;
+  roomGame: RoomGame | null;
   archives: ArchiveFile[] | null;
   onCloseArchives: () => void;
   send: (message: ClientMessage) => void;
@@ -97,7 +101,7 @@ type HudProps = {
 
 /** Overlay: the case and the verdict at the top, the role and controls bottom-left, the prompt and the vote bottom-centre */
 export const Hud
-  = ({ trial, verdict, voteResult, interaction, role, seatId, target, toasts, challenge, onChallengeAnswered, game, archives, onCloseArchives, send }: HudProps) => {
+  = ({ trial, verdict, voteResult, interaction, role, seatId, target, aim, gaugeRef, toasts, challenge, onChallengeAnswered, game, roomGame, archives, onCloseArchives, send }: HudProps) => {
     const [now, setNow] = useState(() => Date.now());
     const [guilty, setGuilty] = useState<boolean | null>(null);
 
@@ -127,7 +131,7 @@ export const Hud
     // The highlighted choice is the last one the court accepted:
     const accepted = voteResult === "ok" ? guilty : null;
     const floor = trial === null ? null : floorName(trial, trial.floor);
-    const canMakeChaos = role === null && seatId?.startsWith("jury-") !== true;
+    const canMakeChaos = roomGame === null && role === null && seatId?.startsWith("jury-") !== true;
 
     return (
       <div className="hud">
@@ -174,62 +178,71 @@ export const Hud
         </div>
 
         <div className="hud-bottom">
-          <div className="hud-corner">
-            <span className="plate role">
-              <span className="role-label">Vous</span>
-              {roleLabel(role, seatId)}
-            </span>
-            <ul className="hints">
-              <li className="hint">
-                <kbd>Z</kbd>
-                <kbd>Q</kbd>
-                <kbd>S</kbd>
-                <kbd>D</kbd>
-                Bouger
-              </li>
-              <li className="hint">
-                <kbd>Maj</kbd>
-                Courir
-              </li>
-              <li className="hint">
-                <kbd>Espace</kbd>
-                Sauter
-              </li>
-              <li className="hint">
-                <kbd>Clic</kbd>
-                Caméra à la souris
-              </li>
-              <li className="hint">
-                <kbd>Échap</kbd>
-                Libérer le curseur
-              </li>
-              {canMakeChaos && (
-                <>
-                  <li className="hint">
-                    <kbd>O</kbd>
-                    Objection !
-                  </li>
-                  <li className="hint">
-                    <kbd>B</kbd>
-                    Dormir
-                  </li>
-                </>
-              )}
-            </ul>
-          </div>
+          {roomGame === null && (
+            <div className="hud-corner">
+              <span className="plate role">
+                <span className="role-label">Vous</span>
+                {roleLabel(role, seatId)}
+              </span>
+              <ul className="hints">
+                <li className="hint">
+                  <kbd>Z</kbd>
+                  <kbd>Q</kbd>
+                  <kbd>S</kbd>
+                  <kbd>D</kbd>
+                  Bouger
+                </li>
+                <li className="hint">
+                  <kbd>Maj</kbd>
+                  Courir
+                </li>
+                <li className="hint">
+                  <kbd>Espace</kbd>
+                  Sauter
+                </li>
+                <li className="hint">
+                  <kbd>Clic</kbd>
+                  Caméra à la souris
+                </li>
+                <li className="hint">
+                  <kbd>Échap</kbd>
+                  Libérer le curseur
+                </li>
+                {canMakeChaos && (
+                  <>
+                    <li className="hint">
+                      <kbd>1</kbd>
+                      Tomate
+                    </li>
+                    <li className="hint">
+                      <kbd>O</kbd>
+                      Objection !
+                    </li>
+                    <li className="hint">
+                      <kbd>B</kbd>
+                      Dormir
+                    </li>
+                  </>
+                )}
+              </ul>
+            </div>
+          )}
 
           <div className="hud-center">
-            {archives !== null && <ArchivesDialog files={archives} onClose={onCloseArchives} />}
+            {roomGame === null && archives !== null && <ArchivesDialog files={archives} onClose={onCloseArchives} />}
             <ChaosHud
               target={target}
+              aim={aim}
+              gaugeRef={gaugeRef}
               canMakeChaos={canMakeChaos}
               toasts={toasts}
               challenge={challenge}
               onChallengeAnswered={onChallengeAnswered}
               game={game}
+              roomGame={roomGame}
               send={send}
             />
-            {trial?.phase === "vote" && (
+            {roomGame === null && trial?.phase === "vote" && (
               <GameDialog
                 size="compact"
                 title="À vous de juger !"

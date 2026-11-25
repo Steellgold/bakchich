@@ -1,18 +1,38 @@
 // Motion of the character models: their animation clips, and a talking layer driven by the loudness of the voice (the intonation) for the face and the arms.
+import type { Air } from "@tribunal/bot/room/world";
 import type { AnimationAction, AnimationMixer, ColorRepresentation, Object3D } from "three";
 import { BoxGeometry, Group, Mesh, MeshBasicMaterial, MeshToonMaterial, PlaneGeometry } from "three";
 
 /** One Blockbench unit in the model's own space */
 export const BB = 1 / 16;
 
-export const CLIP_NAMES = ["idle", "walk", "run", "sit", "fight", "jump"] as const;
+export const CLIP_NAMES = ["idle", "walk", "run", "sit", "fight", "jump", "dive", "fall", "flop", "get_up", "hero_land", "hero_rise"] as const;
 type ClipName = (typeof CLIP_NAMES)[number];
+
+/** Clips that play once from their start when asked for (the others loop; `fall` too, but only while asked for) */
+export const ONE_SHOT_CLIPS: readonly ClipName[] = ["jump", "dive", "flop", "get_up", "hero_land", "hero_rise"];
+/** Clips played on demand, not from the start: the jump and the window jump ones */
+export const ON_DEMAND_CLIPS: readonly ClipName[] = [...ONE_SHOT_CLIPS, "fall"];
+/** Length of `flop` and of `hero_land`, after which `get_up` and `hero_rise` take over */
+const FLOP_CLIP_S = 0.4;
+const HERO_LAND_CLIP_S = 0.5;
 
 export type Clips = {
   mixer: AnimationMixer;
   actions: Partial<Record<ClipName, AnimationAction>>;
   weights: Record<ClipName, number>;
   jumpAt: number;
+  /** The window jump clip that owns the body right now */
+  forced: ClipName | null;
+};
+
+/** The clip that owns the body during a window jump, from the phase and the seconds since it began */
+const airClip = (air: Air | null, age: number): ClipName | null => {
+  if (air === "dive" || air === "fall") return air;
+  if (air === "flop") return age < FLOP_CLIP_S ? "flop" : "get_up";
+  if (air === "hero") return age < HERO_LAND_CLIP_S ? "hero_land" : "hero_rise";
+
+  return null;
 };
 
 type Voice = {
@@ -66,14 +86,23 @@ export const driveClips = (clips: Clips, state: {
   seated: boolean;
   fighting: boolean;
   jumpAt: number;
+  /** Window jump phase and seconds since it began */
+  air: Air | null;
+  airAge: number;
 }, delta: number) => {
   const { actions, weights } = clips;
-  const driven = state.fighting ? actions.fight !== undefined : state.seated ? actions.sit !== undefined : actions.idle !== undefined && actions.walk !== undefined;
+  const forced = airClip(state.air, state.airAge);
+  const driven = forced !== null || (state.fighting ? actions.fight !== undefined : state.seated ? actions.sit !== undefined : actions.idle !== undefined && actions.walk !== undefined);
+
+  if (forced !== clips.forced) {
+    clips.forced = forced;
+    if (forced !== null) actions[forced]?.reset().play();
+  }
 
   if (driven && state.jumpAt !== clips.jumpAt && state.jumpAt > 0) actions.jump?.reset().play();
 
   clips.jumpAt = state.jumpAt;
-  const jumping = driven && actions.jump?.isRunning() === true;
+  const jumping = driven && forced === null && actions.jump?.isRunning() === true;
   const targets: Record<ClipName, number> = {
     idle: 0,
     walk: 0,
@@ -81,9 +110,16 @@ export const driveClips = (clips: Clips, state: {
     sit: 0,
     fight: 0,
     jump: jumping ? 1 : 0,
+    dive: 0,
+    fall: 0,
+    flop: 0,
+    get_up: 0,
+    hero_land: 0,
+    hero_rise: 0,
   };
 
-  if (driven && !jumping) {
+  if (forced !== null) targets[forced] = 1;
+  else if (driven && !jumping) {
     if (state.fighting) targets.fight = 1;
     else if (state.seated) targets.sit = 1;
     else {

@@ -7,6 +7,9 @@ export type Role = "accused" | "prosecutor" | "defense" | "witness";
 /** Where a character may walk: the public side, the restricted zone but not the well, or everywhere */
 export type Access = "public" | "party" | "counsel";
 
+/** Where a member is in a window jump: diving out, away outside, falling out of the portal, or landing (belly flop or superhero) */
+export type Air = "dive" | "away" | "fall" | "flop" | "hero";
+
 export type PlayerState = {
   id: string;
   name: string;
@@ -15,6 +18,7 @@ export type PlayerState = {
   rotation: number;
   seatId: string | null;
   role: Role | null;
+  air: Air | null;
 };
 
 const ROLE_SEATS: Record<"prosecutor" | "defense" | "witness", Seat> = {
@@ -125,6 +129,7 @@ export const pickDisplayedTrial = (current: Trial | null, open: Trial[]): Trial 
 export class World {
   private readonly states = new Map<string, PlayerState>();
   private trial: Trial | null = null;
+  private readonly gameLocks = new Set<string>();
 
   public join(player: { id: string; name: string; avatarUrl: string | null }): "joined" | "replaced" {
     const replaced = this.states.has(player.id);
@@ -134,6 +139,7 @@ export class World {
       rotation: Math.PI,
       seatId: null,
       role: null,
+      air: null,
     };
     this.states.set(player.id, state);
     this.assignRole(state);
@@ -142,6 +148,7 @@ export class World {
 
   public leave(id: string): void {
     this.states.delete(id);
+    this.gameLocks.delete(id);
   }
 
   /**
@@ -151,7 +158,7 @@ export class World {
   public move(id: string, target: Vec2, rotation: number, maxDistance: number): number {
     const state = this.states.get(id);
 
-    if (state?.seatId !== null) return 0;
+    if (state?.seatId !== null || this.gameLocks.has(id) || state.air !== null) return 0;
 
     state.rotation = rotation;
     const access = accessFor(state.role, this.trial);
@@ -187,7 +194,7 @@ export class World {
   public becomeJuror(id: string): "seated" | "too-far" | "full" {
     const state = this.states.get(id);
 
-    if (state === undefined || Math.hypot(state.position.x - GATE.x, state.position.z - GATE.z) > GATE_RADIUS) return "too-far";
+    if (state === undefined || this.gameLocks.has(id) || Math.hypot(state.position.x - GATE.x, state.position.z - GATE.z) > GATE_RADIUS) return "too-far";
 
     const taken = new Set([...this.states.values()].map((player) => player.seatId));
     const free = SEATS.jury.find((seat) => !taken.has(seat.id));
@@ -202,7 +209,7 @@ export class World {
   public sitDown(id: string): void {
     const state = this.states.get(id);
 
-    if (state?.seatId !== null || state.role === null) return;
+    if (state?.seatId !== null || state.role === null || this.gameLocks.has(id)) return;
 
     const seat = this.seatFor(state.role, id);
     if (seat !== undefined && Math.hypot(state.position.x - seat.position.x, state.position.z - seat.position.z) <= SEAT_REACH) this.sit(state, seat);
@@ -211,7 +218,7 @@ export class World {
   public sitOnBench(id: string): void {
     const state = this.states.get(id);
 
-    if (state?.seatId !== null) return;
+    if (state?.seatId !== null || this.gameLocks.has(id)) return;
 
     const occupiedSeats = new Set([...this.states.values()].map((player) => player.seatId));
     const seat = nearbyBenchSeat(state.position, occupiedSeats);
@@ -222,7 +229,7 @@ export class World {
   public standUp(id: string): void {
     const state = this.states.get(id);
 
-    if (state === undefined || state.seatId === null) return;
+    if (state === undefined || state.seatId === null || this.gameLocks.has(id)) return;
 
     const bench = state.seatId.startsWith("bench-") ? OBSTACLES.find(
       ({ kind, min, max }) => kind === "bench" && state.position.x >= min.x && state.position.x <= max.x && state.position.z >= min.z && state.position.z <= max.z,
@@ -236,6 +243,22 @@ export class World {
     // The witness seat is inside the stand box: step out on its open back side.
     else if (state.role === "witness") state.position = { x: state.position.x, z: SEATS.witness.position.z + 1.15 };
   }
+
+  /** Place a participant on free floor, standing, and hold them until the game ends. */
+  public placeForGame(id: string, position: Vec2, rotation: number): void {
+    const state = this.states.get(id);
+    if (state === undefined) return;
+    state.seatId = null;
+    state.position = { ...position };
+    state.rotation = rotation;
+    this.gameLocks.add(id);
+  }
+
+  public releaseGame(ids: string[]): void {
+    for (const id of ids) this.gameLocks.delete(id);
+  }
+
+  public isPlaying(id: string): boolean { return this.gameLocks.has(id); }
 
   /** Change the displayed trial: everyone leaves the restricted zone, then the new convoked players take their seats */
   public setTrial(trial: Trial | null): void {

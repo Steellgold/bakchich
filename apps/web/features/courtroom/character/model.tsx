@@ -6,7 +6,7 @@ import type { Clips, FaceSpec, Rig } from "./motion";
 import type { RefObject } from "react";
 import type { Texture } from "three";
 import { InkOutlines, mergeCubes, toonify } from "../toon-model";
-import { BB, buildFace, CLIP_NAMES } from "./motion";
+import { BB, buildFace, CLIP_NAMES, ON_DEMAND_CLIPS, ONE_SHOT_CLIPS } from "./motion";
 import { facetGeometry, Toon } from "./parts";
 import { useGLTF } from "@react-three/drei";
 import { createPortal } from "@react-three/fiber";
@@ -108,8 +108,11 @@ export const CharacterModel = ({ kind, look, texture, splat, rigRef }: {
       if (clip === undefined) continue;
 
       const action = mixer.clipAction(clip).setEffectiveWeight(0);
-      if (name === "jump") action.setLoop(LoopOnce, 1);
-      else action.play();
+      if (ONE_SHOT_CLIPS.includes(name)) {
+        action.setLoop(LoopOnce, 1);
+        action.clampWhenFinished = true;
+      }
+      if (!ON_DEMAND_CLIPS.includes(name)) action.play();
       actions[name] = action;
     }
 
@@ -134,8 +137,15 @@ export const CharacterModel = ({ kind, look, texture, splat, rigRef }: {
           sit: 0,
           fight: 0,
           jump: 0,
+          dive: 0,
+          fall: 0,
+          flop: 0,
+          get_up: 0,
+          hero_land: 0,
+          hero_rise: 0,
         },
         jumpAt: 0,
+        forced: null,
       },
       face: head === null ? undefined : buildFace(head, spec.face, new Color(spec.skin).multiply(new Color(tints.skin ?? "#ffffff"))),
     };
